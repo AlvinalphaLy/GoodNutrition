@@ -1,0 +1,59 @@
+import React from "react";
+import { Button, View, Text, StyleSheet, TextInput } from "react-native";
+
+const styles = StyleSheet.create({
+  center: {
+    marginTop: 70,
+    alignItems: "center",
+  },
+  h1: {
+    fontSize: 35,
+    fontWeight: "bold",
+  },
+  input: {
+    height: 40,
+    width: 350,
+    margin: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  link: {
+    color: "#1E90FF",
+    textDecorationLine: "underline",
+    fontWeight: "500",
+  },
+  subText: {
+    color: "#737373",
+  },
+});
+
+export default function Index() {
+  return (
+    <View style={[styles.center, { flex: 1 }]}>
+      <Text style={styles.h1}>Forgot Password</Text>
+      <Text style={[styles.subText, { marginBottom: 10 }]}>
+        Enter your email to reset your password
+      </Text>
+      <TextFields />
+
+      <View style={{ width: 350, margin: 10 }}>
+        <Button title="Reset Password" />
+      </View>
+    </View>
+  );
+}
+const TextFields = () => {
+  const [email, setEmail] = React.useState("");
+
+  return (
+    <View>
+      <TextInput
+        value={email}
+        onChangeText={setEmail}
+        style={styles.input}
+        placeholder="Email"
+        autoCorrect={false}
+      ></TextInput>
+    </View>
+  );
+};
