@@ -1,6 +1,6 @@
 import React from "react";
 import { Button, View, Text, StyleSheet, TextInput } from "react-native";
-import { colors } from "../lib/colors.js";
+import { colors } from "../lib/colors";
 
 const styles = StyleSheet.create({
   center: {
