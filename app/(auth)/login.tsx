@@ -1,6 +1,7 @@
 import React from "react";
 import { Button, View, Text, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
+import { colors } from "../lib/colors";
 
 const styles = StyleSheet.create({
   center: {
@@ -19,12 +20,12 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   separator: {
-    borderBottomColor: "#737373",
+    borderBottomColor: colors.textMedium,
     borderBottomWidth: StyleSheet.hairlineWidth,
     width: "80%",
   },
   link: {
-    color: "#1E90FF",
+    color: colors.info,
     textDecorationLine: "underline",
     fontWeight: "500",
   },
@@ -32,7 +33,7 @@ const styles = StyleSheet.create({
     fontSize: 50,
   },
   subText: {
-    color: "#737373",
+    color: colors.textMedium,
   },
 });
 
@@ -50,20 +51,20 @@ export default function Index() {
       <TextFields />
 
       <View style={{ alignItems: "flex-end", width: 350, marginTop: 5 }}>
-        <Link href="/auth/forgotPassword" style={styles.link}>
+        <Link href="../(auth)/forgotPassword" style={styles.link}>
           Forgot password
         </Link>
       </View>
 
       <View style={{ width: 350, margin: 20 }}>
-        <Button title="Log in" />
+        <Button title="Log in" color={colors.primary} />
       </View>
       <Separator />
 
       <View style={[{ margin: 20 }]}>
         <Text style={styles.subText}>
           Don’t have an account?{" "}
-          <Link href="/auth/signup" style={styles.link}>
+          <Link href="../(auth)/signup" style={styles.link}>
             Sign up
           </Link>
         </Text>

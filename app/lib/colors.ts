@@ -1,4 +1,3 @@
-// lib/colors.js
 export const colors = {
   // Primary
   primary: "#2563EB",

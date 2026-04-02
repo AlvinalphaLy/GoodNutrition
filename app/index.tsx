@@ -12,7 +12,7 @@ export default function Index() {
       }}
     >
       <Text>YOU ARE AT THE INDEX SCREEN!</Text>
-      <Link href="/auth/login" push>
+      <Link href="/(auth)/login" push>
         Login Screen
       </Link>
     </View>

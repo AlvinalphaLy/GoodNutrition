@@ -1,5 +1,6 @@
 import React from "react";
 import { Button, View, Text, StyleSheet, TextInput } from "react-native";
+import { colors } from "../lib/colors.js";
 
 const styles = StyleSheet.create({
   center: {
@@ -18,12 +19,12 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   link: {
-    color: "#1E90FF",
+    color: colors.info,
     textDecorationLine: "underline",
     fontWeight: "500",
   },
   subText: {
-    color: "#737373",
+    color: colors.textMedium,
   },
 });
 
@@ -37,7 +38,7 @@ export default function Index() {
       <TextFields />
 
       <View style={{ width: 350, margin: 10 }}>
-        <Button title="Reset Password" />
+        <Button title="Reset Password" color={colors.primary} />
       </View>
     </View>
   );

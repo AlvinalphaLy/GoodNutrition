@@ -1,6 +1,7 @@
 import React from "react";
 import { Button, View, Text, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
+import { colors } from "../lib/colors.js";
 
 const styles = StyleSheet.create({
   center: {
@@ -19,17 +20,17 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   separator: {
-    borderBottomColor: "#737373",
+    borderBottomColor: colors.textMedium,
     borderBottomWidth: StyleSheet.hairlineWidth,
     width: "80%",
   },
   link: {
-    color: "#1E90FF",
+    color: colors.primary,
     textDecorationLine: "underline",
     fontWeight: "500",
   },
   subText: {
-    color: "#737373",
+    color: colors.textMedium,
   },
 });
 
@@ -45,14 +46,14 @@ export default function Index() {
       <TextFields />
 
       <View style={{ width: 350, margin: 20 }}>
-        <Button title="Sign up" />
+        <Button title="Sign up" color={colors.primary} />
       </View>
       <Separator />
 
       <View style={{ margin: 20 }}>
         <Text style={styles.subText}>
           Already have an account?{" "}
-          <Link href="/auth/login" style={styles.link}>
+          <Link href="/(auth)/login" style={styles.link}>
             Log in
           </Link>
         </Text>
