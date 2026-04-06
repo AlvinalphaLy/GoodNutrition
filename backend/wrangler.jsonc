@@ -1,0 +1,59 @@
+{
+  // Cloudflare Workers + Agents configuration
+  // Run `wrangler cf-typegen` after changes to regenerate worker-configuration.d.ts
+
+  "name": "good-nutrition-ai",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // ── Durable Objects ─────────────────────────────────────────────────────────
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NUTRITION_CHAT_AGENT",
+        "class_name": "NutritionChatAgent"
+      }
+    ]
+  },
+
+  // ── Migrations ──────────────────────────────────────────────────────────────
+  // SQLite is enabled per-class via new_sqlite_classes.
+  // Add a new migration entry whenever you rename or add a DO class.
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["NutritionChatAgent"]
+    }
+  ],
+
+  // ── Secrets (set via `wrangler secret put ANTHROPIC_API_KEY`) ───────────────
+  // Do NOT commit real keys — list them here for documentation only.
+  // "vars": {
+  //   "ENVIRONMENT": "development"
+  // },
+
+  // ── Staging environment ─────────────────────────────────────────────────────
+  "env": {
+    "staging": {
+      "name": "good-nutrition-ai-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    }
+  },
+
+  // ── Local dev ───────────────────────────────────────────────────────────────
+  // wrangler dev uses local Durable Object storage automatically.
+  // Set your API key with: echo "ANTHROPIC_API_KEY=sk-ant-..." > .dev.vars
+  "dev": {
+    "port": 8787,
+    "local_protocol": "http",
+    "ip": "0.0.0.0"
+  },
+
+  // ── Observability ───────────────────────────────────────────────────────────
+  "observability": {
+    "enabled": true
+  }
+}

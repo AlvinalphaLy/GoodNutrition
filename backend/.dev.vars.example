@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local wrangler dev.
+# .dev.vars is gitignored.
+ANTHROPIC_API_KEY=sk-ant-api03-replace-me
+ENVIRONMENT=development

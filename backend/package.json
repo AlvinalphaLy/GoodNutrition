@@ -1,0 +1,29 @@
+{
+  "name": "good-nutrition-ai-backend",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers + Agents backend for GoodNutrition AI chat",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:remote": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "agents": "^0.0.94",
+    "ai": "^4.3.16",
+    "@ai-sdk/anthropic": "^1.1.6",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250405.0",
+    "@cloudflare/vitest-pool-workers": "^0.8.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.10.0",
+    "vitest": "^3.1.1"
+  }
+}
