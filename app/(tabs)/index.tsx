@@ -1,5 +1,6 @@
 import React from "react";
-import { Text, View, StyleSheet } from "react-native";
+import { Pressable, Text, View, StyleSheet } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { colors } from "../lib/colors";
 export default function Index() {
@@ -37,6 +38,17 @@ export default function Index() {
       </View>
       <View>
         <Text style={styles.header}>Log Meal</Text>
+        <View style={styles.logMealContainer}>
+          <Pressable onPress={() => console.log("pressed")}>
+            <Ionicons name="search" size={30} color={colors.textDark} />
+          </Pressable>
+          <Pressable onPress={() => console.log("pressed")}>
+            <Ionicons name="barcode-sharp" size={30} color={colors.textDark} />
+          </Pressable>
+          <Pressable onPress={() => console.log("pressed")}>
+            <Ionicons name="mic" size={30} color={colors.textDark} />
+          </Pressable>
+        </View>
       </View>
       <View>
         <Text style={styles.header}>Today&apos;s Meals</Text>
@@ -63,12 +75,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     marginTop: 8,
-    padding: 12,
-    borderRadius: 10,
+    padding: 15,
+    borderRadius: 12,
     backgroundColor: colors.cardBg,
+    shadowColor: "black",
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
   },
   macrosContainer: {
     gap: 3,
+  },
+  logMealContainer: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-evenly",
+    padding: 15,
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    shadowColor: "black",
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
   },
   circle: {
     width: 50,
