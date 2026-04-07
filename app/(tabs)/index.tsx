@@ -3,12 +3,14 @@ import { Pressable, Text, View, StyleSheet } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { colors } from "../lib/colors";
+import EmptyState from "../components/EmptyState";
+
 export default function Index() {
   return (
     <View style={styles.container}>
       <View>
         <Text style={styles.header}>Today&apos;s Summary</Text>
-        <View style={styles.summaryContainer}>
+        <View style={styles.subContainer}>
           <View>
             <Text style={styles.subHeader}>CALORIES</Text>
             <Text style={{ fontWeight: "bold", fontSize: 30 }}>1,450</Text>
@@ -29,7 +31,7 @@ export default function Index() {
             </View>
           </View>
           <View>
-            <Text style={styles.subHeader}>SCORE</Text>
+            <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
             <View style={styles.circle}>
               <Text style={styles.circleText}>3</Text>
             </View>
@@ -38,7 +40,7 @@ export default function Index() {
       </View>
       <View>
         <Text style={styles.header}>Log Meal</Text>
-        <View style={styles.logMealContainer}>
+        <View style={[styles.subContainer, { justifyContent: "space-evenly" }]}>
           <Pressable onPress={() => console.log("pressed")}>
             <Ionicons name="search" size={30} color={colors.textDark} />
           </Pressable>
@@ -52,6 +54,7 @@ export default function Index() {
       </View>
       <View>
         <Text style={styles.header}>Today&apos;s Meals</Text>
+        <EmptyState />
       </View>
     </View>
   );
@@ -71,14 +74,14 @@ const styles = StyleSheet.create({
     color: colors.textMedium,
     marginBottom: 5,
   },
-  summaryContainer: {
+  subContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginTop: 8,
     padding: 15,
     borderRadius: 12,
     backgroundColor: colors.cardBg,
-    shadowColor: "black",
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
@@ -86,19 +89,6 @@ const styles = StyleSheet.create({
   },
   macrosContainer: {
     gap: 3,
-  },
-  logMealContainer: {
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "space-evenly",
-    padding: 15,
-    backgroundColor: colors.cardBg,
-    borderRadius: 12,
-    shadowColor: "black",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 3,
   },
   circle: {
     width: 50,
