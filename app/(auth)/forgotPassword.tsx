@@ -2,32 +2,6 @@ import React from "react";
 import { Button, View, Text, StyleSheet, TextInput } from "react-native";
 import { colors } from "../lib/colors";
 
-const styles = StyleSheet.create({
-  center: {
-    marginTop: 70,
-    alignItems: "center",
-  },
-  h1: {
-    fontSize: 35,
-    fontWeight: "bold",
-  },
-  input: {
-    height: 40,
-    width: 350,
-    margin: 12,
-    borderWidth: 1,
-    padding: 10,
-  },
-  link: {
-    color: colors.info,
-    textDecorationLine: "underline",
-    fontWeight: "500",
-  },
-  subText: {
-    color: colors.textMedium,
-  },
-});
-
 export default function Index() {
   return (
     <View style={[styles.center, { flex: 1 }]}>
@@ -58,3 +32,29 @@ const TextFields = () => {
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  center: {
+    marginTop: 70,
+    alignItems: "center",
+  },
+  h1: {
+    fontSize: 35,
+    fontWeight: "bold",
+  },
+  input: {
+    height: 40,
+    width: 350,
+    margin: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  link: {
+    color: colors.info,
+    textDecorationLine: "underline",
+    fontWeight: "500",
+  },
+  subText: {
+    color: colors.textMedium,
+  },
+});

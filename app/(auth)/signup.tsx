@@ -3,37 +3,6 @@ import { Button, View, Text, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
 import { colors } from "../lib/colors";
 
-const styles = StyleSheet.create({
-  center: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  h1: {
-    fontSize: 55,
-    fontWeight: "bold",
-  },
-  input: {
-    height: 40,
-    width: 350,
-    margin: 12,
-    borderWidth: 1,
-    padding: 10,
-  },
-  separator: {
-    borderBottomColor: colors.textMedium,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    width: "80%",
-  },
-  link: {
-    color: colors.primary,
-    textDecorationLine: "underline",
-    fontWeight: "500",
-  },
-  subText: {
-    color: colors.textMedium,
-  },
-});
-
 const Separator = () => <View style={styles.separator} />;
 
 export default function Index() {
@@ -99,3 +68,34 @@ const TextFields = () => {
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  center: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  h1: {
+    fontSize: 55,
+    fontWeight: "bold",
+  },
+  input: {
+    height: 40,
+    width: 350,
+    margin: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  separator: {
+    borderBottomColor: colors.textMedium,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    width: "80%",
+  },
+  link: {
+    color: colors.primary,
+    textDecorationLine: "underline",
+    fontWeight: "500",
+  },
+  subText: {
+    color: colors.textMedium,
+  },
+});

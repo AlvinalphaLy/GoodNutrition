@@ -1,41 +1,8 @@
 import React from "react";
 import { Button, View, Text, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
-import { colors } from "../lib/colors";
 
-const styles = StyleSheet.create({
-  center: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  h1: {
-    fontSize: 55,
-    fontWeight: "bold",
-  },
-  input: {
-    height: 40,
-    width: 350,
-    margin: 12,
-    borderWidth: 1,
-    padding: 10,
-  },
-  separator: {
-    borderBottomColor: colors.textMedium,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    width: "80%",
-  },
-  link: {
-    color: colors.info,
-    textDecorationLine: "underline",
-    fontWeight: "500",
-  },
-  logo: {
-    fontSize: 50,
-  },
-  subText: {
-    color: colors.textMedium,
-  },
-});
+import { colors } from "../lib/colors";
 
 const Separator = () => <View style={styles.separator} />;
 
@@ -95,3 +62,37 @@ const TextFields = () => {
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  center: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  h1: {
+    fontSize: 55,
+    fontWeight: "bold",
+  },
+  input: {
+    height: 40,
+    width: 350,
+    margin: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  separator: {
+    borderBottomColor: colors.textMedium,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    width: "80%",
+  },
+  link: {
+    color: colors.info,
+    textDecorationLine: "underline",
+    fontWeight: "500",
+  },
+  logo: {
+    fontSize: 50,
+  },
+  subText: {
+    color: colors.textMedium,
+  },
+});
