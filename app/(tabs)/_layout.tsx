@@ -24,10 +24,12 @@ export default function TabLayout() {
           ),
         }}
       />
+
       <Tabs.Screen
         name="meals"
         options={{
           title: "Meals",
+          headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <MaterialCommunityIcons
               name={focused ? "food-apple" : "food-apple-outline"}
@@ -37,6 +39,7 @@ export default function TabLayout() {
           ),
         }}
       />
+
       <Tabs.Screen
         name="reports"
         options={{
@@ -50,6 +53,7 @@ export default function TabLayout() {
           ),
         }}
       />
+
       <Tabs.Screen
         name="profile"
         options={{
