@@ -45,10 +45,17 @@ export default function Index() {
             <Ionicons name="search" size={30} color={colors.textDark} />
           </Pressable>
           <Pressable onPress={() => console.log("pressed")}>
-            <Ionicons name="barcode-sharp" size={30} color={colors.textDark} />
+            <Ionicons name="barcode" size={30} color={colors.textDark} />
           </Pressable>
           <Pressable onPress={() => console.log("pressed")}>
             <Ionicons name="mic" size={30} color={colors.textDark} />
+          </Pressable>
+          <Pressable onPress={() => console.log("pressed")}>
+            <Ionicons
+              name="chatbox-ellipses"
+              size={30}
+              color={colors.textDark}
+            />
           </Pressable>
         </View>
       </View>

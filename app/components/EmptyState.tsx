@@ -26,8 +26,7 @@ const EmptyState = () => {
         </View>
       </View>
 
-      <Text style={styles.title}>No meals logged yet</Text>
-      <Text style={styles.subtitle}>Tap + to log your first meal</Text>
+      <Text style={styles.subtitle}>No meals logged yet</Text>
     </View>
   );
 };
@@ -103,16 +102,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     borderRadius: 4,
   },
-  title: {
-    color: colors.textDark,
-    fontSize: 18,
-    fontWeight: "700",
-    marginTop: 10,
-  },
   subtitle: {
     color: colors.textMedium,
     fontSize: 14,
-    marginTop: 4,
   },
 });
 
