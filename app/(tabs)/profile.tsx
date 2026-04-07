@@ -1,7 +1,7 @@
 import React from "react";
 import { Text, View, StyleSheet } from "react-native";
 
-export default function Index() {
+export default function Profile() {
   return (
     <View style={styles.container}>
       <Text>Profile</Text>

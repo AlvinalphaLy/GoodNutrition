@@ -6,4 +6,5 @@ node_modules/
 
 expo-env.d.ts
 expo/types/router.d.ts
+.expo/types/router.d.ts
 # @end expo-cli
