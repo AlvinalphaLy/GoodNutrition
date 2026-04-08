@@ -5,67 +5,102 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { colors } from "../lib/colors";
 import EmptyState from "../components/EmptyState";
 
+type CaloriesProps = {
+  current: number;
+  goal: number;
+};
+
+type MacroProps = {
+  nutrient: string;
+  current: number;
+  goal: number;
+};
+
+type LogButtonProps = {
+  name: keyof typeof Ionicons.glyphMap;
+  onPress: () => void | Promise<void>;
+};
+
 export default function Index() {
   return (
     <View style={styles.container}>
-      <View>
-        <Text style={styles.header}>Today&apos;s Summary</Text>
-        <View style={styles.subContainer}>
-          <View>
-            <Text style={styles.subHeader}>CALORIES</Text>
-            <Text style={{ fontWeight: "bold", fontSize: 30 }}>1,450</Text>
-            <Text> / 2,000</Text>
-          </View>
-          <View>
-            <Text style={styles.subHeader}>MACROS</Text>
-            <View style={styles.macrosContainer}>
-              <Text>
-                Protein: <Text style={{ fontWeight: "bold" }}>120g</Text> / 160g
-              </Text>
-              <Text>
-                Carbs: <Text style={{ fontWeight: "bold" }}>120g</Text> / 160g
-              </Text>
-              <Text>
-                Fats: <Text style={{ fontWeight: "bold" }}>44g</Text> / 78g
-              </Text>
-            </View>
-          </View>
-          <View>
-            <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
-            <View style={styles.circle}>
-              <Text style={styles.circleText}>3</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-      <View>
-        <Text style={styles.header}>Log Meal</Text>
-        <View style={[styles.subContainer, { justifyContent: "space-evenly" }]}>
-          <Pressable onPress={() => console.log("pressed")}>
-            <Ionicons name="search" size={30} color={colors.textDark} />
-          </Pressable>
-          <Pressable onPress={() => console.log("pressed")}>
-            <Ionicons name="barcode" size={30} color={colors.textDark} />
-          </Pressable>
-          <Pressable onPress={() => console.log("pressed")}>
-            <Ionicons name="mic" size={30} color={colors.textDark} />
-          </Pressable>
-          <Pressable onPress={() => console.log("pressed")}>
-            <Ionicons
-              name="chatbox-ellipses"
-              size={30}
-              color={colors.textDark}
-            />
-          </Pressable>
-        </View>
-      </View>
-      <View>
-        <Text style={styles.header}>Today&apos;s Meals</Text>
-        <EmptyState />
-      </View>
+      <Summary />
+      <LogMeal />
+      <Meals />
     </View>
   );
 }
+
+const Summary = () => (
+  <View>
+    <Text style={styles.header}>Today&apos;s Summary</Text>
+    <View style={styles.subContainer}>
+      <Calories current={1450} goal={2500} />
+      <Macros />
+      <View>
+        <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
+        <View style={styles.circle}>
+          <Text style={styles.circleText}>3/10</Text>
+        </View>
+      </View>
+    </View>
+  </View>
+);
+
+const Calories = ({ current, goal }: CaloriesProps) => (
+  <View>
+    <Text style={styles.subHeader}>CALORIES</Text>
+    <Text style={{ fontWeight: "bold", fontSize: 30 }}>{current}</Text>
+    <Text> / {goal}</Text>
+  </View>
+);
+
+// NOTE: How are we going to pass each macro info?
+const Macros = () => (
+  <View>
+    <Text style={styles.subHeader}>MACROS</Text>
+    <View style={styles.macrosContainer}>
+      <MacroNutrient nutrient={"Protein"} current={120} goal={160} />
+      <MacroNutrient nutrient={"Carbs"} current={150} goal={200} />
+      <MacroNutrient nutrient={"Fats"} current={44} goal={77} />
+    </View>
+  </View>
+);
+
+const MacroNutrient = ({ nutrient, current, goal }: MacroProps) => (
+  <Text>
+    {nutrient}: <Text style={{ fontWeight: "bold" }}>{current}g</Text> / {goal}g
+  </Text>
+);
+
+const LogMeal = () => (
+  <View>
+    <Text style={styles.header}>Log Meal</Text>
+    <View style={[styles.subContainer, { justifyContent: "space-evenly" }]}>
+      <LogButton name={"search"} onPress={() => console.log("pressed")} />
+      <LogButton name={"barcode"} onPress={() => console.log("pressed")} />
+      <LogButton name={"mic"} onPress={() => console.log("pressed")} />
+      <LogButton
+        name={"chatbubble-ellipses"}
+        onPress={() => console.log("pressed")}
+      />
+    </View>
+  </View>
+);
+
+const LogButton = ({ name, onPress }: LogButtonProps) => (
+  <Pressable onPress={onPress}>
+    <Ionicons name={name} size={30} color={colors.textDark} />
+  </Pressable>
+);
+
+// TODO: Handle empty state
+const Meals = () => (
+  <View>
+    <Text style={styles.header}>Today&apos;s Meals</Text>
+    <EmptyState />
+  </View>
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -107,7 +142,7 @@ const styles = StyleSheet.create({
   },
   circleText: {
     fontWeight: "bold",
-    fontSize: 25,
+    fontSize: 18,
     color: colors.white,
   },
 });
