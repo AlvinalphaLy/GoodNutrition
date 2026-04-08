@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, View, StyleSheet } from "react-native";
+import { Pressable, Text, ScrollView, View, StyleSheet } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { colors } from "../lib/colors";
@@ -11,7 +11,7 @@ type CaloriesProps = {
 };
 
 type MacroProps = {
-  nutrient: string;
+  nutrient: "Protein" | "Carbs" | "Fats";
   current: number;
   goal: number;
 };
@@ -23,26 +23,58 @@ type LogButtonProps = {
 
 export default function Index() {
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
       <Summary />
       <LogMeal />
       <Meals />
-    </View>
+    </ScrollView>
   );
 }
 
 const Summary = () => (
   <View>
     <Text style={styles.header}>Today&apos;s Summary</Text>
-    <View style={styles.subContainer}>
-      <Calories current={1450} goal={2500} />
-      <Macros />
-      <View>
-        <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
-        <View style={styles.circle}>
-          <Text style={styles.circleText}>3/10</Text>
+    <View>
+      <View style={styles.subContainer}>
+        <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
+          <Calories current={1450} goal={2500} />
+          <Macros />
+          <Score rate={2} />
         </View>
+        <Separator />
+        <HarmfulIngredientsSummary count={2} />
       </View>
+    </View>
+  </View>
+);
+
+const HarmfulIngredientsSummary = ({ count }: { count: number }) => (
+  <Pressable
+    style={{
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginHorizontal: 12,
+    }}
+    onPress={() => console.log("pressed")}
+  >
+    <Text
+      style={{
+        color: colors.danger,
+        fontStyle: "italic",
+        textDecorationLine: "underline",
+      }}
+    >
+      {count} harmful ingredients detected
+    </Text>
+    <Ionicons name="chevron-forward" size={18} color={colors.textMedium} />
+  </Pressable>
+);
+
+const Score = ({ rate }: { rate: number }) => (
+  <View>
+    <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
+    <View style={styles.circle}>
+      <Text style={styles.circleText}>{rate}/5</Text>
     </View>
   </View>
 );
@@ -76,7 +108,12 @@ const MacroNutrient = ({ nutrient, current, goal }: MacroProps) => (
 const LogMeal = () => (
   <View>
     <Text style={styles.header}>Log Meal</Text>
-    <View style={[styles.subContainer, { justifyContent: "space-evenly" }]}>
+    <View
+      style={[
+        styles.subContainer,
+        { justifyContent: "space-around", flexDirection: "row" },
+      ]}
+    >
       <LogButton name={"search"} onPress={() => console.log("pressed")} />
       <LogButton name={"barcode"} onPress={() => console.log("pressed")} />
       <LogButton name={"mic"} onPress={() => console.log("pressed")} />
@@ -98,16 +135,26 @@ const LogButton = ({ name, onPress }: LogButtonProps) => (
 const Meals = () => (
   <View>
     <Text style={styles.header}>Today&apos;s Meals</Text>
-    <EmptyState />
+    {/* <EmptyState /> */}
+    <View style={{ marginVertical: 10, marginHorizontal: 5 }}>
+      <Text style={{ color: colors.textLight, fontSize: 16 }}>BREAKFAST</Text>
+    </View>
   </View>
 );
 
+const Separator = () => (
+  <View
+    style={{
+      height: 1,
+      width: "95%",
+      backgroundColor: colors.textLight,
+      marginVertical: 14,
+      alignSelf: "center",
+    }}
+  />
+);
+
 const styles = StyleSheet.create({
-  container: {
-    margin: 20,
-    flex: 1,
-    gap: 20,
-  },
   header: {
     fontSize: 20,
     fontWeight: "bold",
@@ -117,7 +164,6 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   subContainer: {
-    flexDirection: "row",
     justifyContent: "space-around",
     marginTop: 8,
     padding: 15,
@@ -132,6 +178,7 @@ const styles = StyleSheet.create({
   macrosContainer: {
     gap: 3,
   },
+  //TODO: move bg color somewhere else
   circle: {
     width: 50,
     height: 50,
