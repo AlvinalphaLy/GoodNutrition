@@ -114,8 +114,8 @@ const LogMeal = () => (
         { justifyContent: "space-around", flexDirection: "row" },
       ]}
     >
-      <LogButton name={"search"} onPress={() => console.log("pressed")} />
       <LogButton name={"barcode"} onPress={() => console.log("pressed")} />
+      <LogButton name={"search"} onPress={() => console.log("pressed")} />
       <LogButton name={"mic"} onPress={() => console.log("pressed")} />
       <LogButton
         name={"chatbubble-ellipses"}
