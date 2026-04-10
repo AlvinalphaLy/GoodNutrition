@@ -19,6 +19,7 @@ type MacroProps = {
 
 type LogButtonProps = {
   name: keyof typeof Ionicons.glyphMap;
+  path: string;
 };
 
 export default function Index() {
@@ -114,16 +115,16 @@ const LogMeal = () => (
         { justifyContent: "space-around", flexDirection: "row" },
       ]}
     >
-      <LogButton name={"barcode"} />
-      <LogButton name={"search"} />
-      <LogButton name={"mic"} />
-      <LogButton name={"chatbubble-ellipses"} />
+      <LogButton name={"barcode"} path="barcode-scan" />
+      <LogButton name={"search"} path="" />
+      <LogButton name={"mic"} path="" />
+      <LogButton name={"chatbubble-ellipses"} path="" />
     </View>
   </View>
 );
 
-const LogButton = ({ name }: LogButtonProps) => (
-  <Link href={"../barcode-scan"}>
+const LogButton = ({ name, path }: LogButtonProps) => (
+  <Link href={`../${path}`}>
     <Ionicons name={name} size={30} color={colors.textDark} />
   </Link>
 );
