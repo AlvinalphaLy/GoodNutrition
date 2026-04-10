@@ -4,7 +4,6 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link } from "expo-router";
 
 import { colors } from "../lib/colors";
-// import EmptyState from "../components/EmptyState";
 
 type CaloriesProps = {
   current: number;
@@ -134,8 +133,24 @@ const Meals = () => (
   <View>
     <Text style={styles.header}>Today&apos;s Meals</Text>
     {/* <EmptyState /> */}
-    <View style={{ marginVertical: 10, marginHorizontal: 5 }}>
-      <Text style={{ color: colors.textLight, fontSize: 16 }}>BREAKFAST</Text>
+    <View style={{ marginVertical: 10 }}>
+      <MealCard mealType="BREAKFAST" />
+      <MealCard mealType="LUNCH" />
+      <MealCard mealType="DINNER" />
+      <MealCard mealType="SNACK" />
+    </View>
+  </View>
+);
+
+type mealCardProps = {
+  mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
+};
+
+const MealCard = ({ mealType }: mealCardProps) => (
+  <View style={{ marginVertical: 5 }}>
+    <Text style={{ color: colors.textLight, fontSize: 14 }}>{mealType}</Text>
+    <View style={styles.subContainer}>
+      <Text style={{ fontSize: 20, fontWeight: "bold" }}>450kcal</Text>
     </View>
   </View>
 );
@@ -154,7 +169,7 @@ const Separator = () => (
 
 const styles = StyleSheet.create({
   header: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
   },
   subHeader: {
@@ -171,7 +186,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 5,
   },
   macrosContainer: {
     gap: 3,
