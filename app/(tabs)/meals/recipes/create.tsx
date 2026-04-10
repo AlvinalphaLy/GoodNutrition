@@ -1,72 +1,128 @@
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+import { fieldPlaceholderColor } from "../display";
+import { useMeals } from "../meals-context";
+import {
+  getNamedItemError,
+  getPositiveIntegerError,
+  isValidNamedItem,
+  isValidPositiveInteger,
+} from "../validation";
 
 export default function CreateRecipeScreen() {
-  const [recipeName, setRecipeName] = useState("");
-  const [servings, setServings] = useState("");
+  const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { recipeDraft, startRecipeDraft, editingRecipeId } = useMeals();
+  const [recipeName, setRecipeName] = useState(recipeDraft.name);
+  const [servings, setServings] = useState(recipeDraft.servings);
+  const [attemptedContinue, setAttemptedContinue] = useState(false);
 
-  const canContinue = useMemo(() => recipeName.trim().length > 0, [recipeName]);
+  useEffect(() => {
+    setRecipeName(recipeDraft.name);
+    setServings(recipeDraft.servings);
+  }, [recipeDraft.name, recipeDraft.servings]);
+
+  const canContinue = useMemo(
+    () => isValidNamedItem(recipeName) && isValidPositiveInteger(servings),
+    [recipeName, servings]
+  );
+
+  const nameError = attemptedContinue || recipeName.trim()
+    ? getNamedItemError(recipeName, "Recipe name")
+    : "";
+  const servingsError = attemptedContinue || servings.trim()
+    ? getPositiveIntegerError(servings, "Servings")
+    : "";
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create New Recipe</Text>
-      <Text style={styles.subtitle}>
-        Enter the recipe name and servings to start a recipe draft
-      </Text>
-
-      <Text style={styles.label}>Recipe Name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Chicken Alfredo Pasta"
-        value={recipeName}
-        onChangeText={setRecipeName}
-      />
-
-      <Text style={styles.label}>Servings (Optional)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 4"
-        value={servings}
-        onChangeText={setServings}
-      />
-
-      <View style={styles.previewCard}>
-        <Text style={styles.previewTitle}>Recipe Draft Preview</Text>
-        <Text style={styles.previewText}>
-          Name: {recipeName.trim() || "Not entered yet"}
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={96}
+    >
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.container}>
+        <Text style={styles.title}>{editingRecipeId ? "Edit Recipe" : "Create New Recipe"}</Text>
+        <Text style={styles.subtitle}>
+          Start with the recipe basics, then add the ingredients that make up the recipe.
         </Text>
-        <Text style={styles.previewText}>
-          Servings: {servings.trim() || "Not entered yet"}
-        </Text>
-      </View>
 
-      <Pressable
-        style={[styles.button, !canContinue && styles.buttonDisabled]}
-      >
-        <Text
-          style={[
-            styles.buttonText,
-            !canContinue && styles.buttonTextDisabled,
-          ]}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Recipe Name</Text>
+          <Text style={styles.helperText}>Choose a clear name so this recipe is easy to find later.</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Chicken Alfredo Pasta"
+            placeholderTextColor={fieldPlaceholderColor}
+            value={recipeName}
+            onChangeText={setRecipeName}
+          />
+          {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
+
+          <Text style={styles.sectionTitle}>Servings</Text>
+          <Text style={styles.helperText}>Enter how many servings the full recipe makes.</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 4"
+            placeholderTextColor={fieldPlaceholderColor}
+            value={servings}
+            onChangeText={setServings}
+            keyboardType="number-pad"
+          />
+          {servingsError ? <Text style={styles.errorText}>{servingsError}</Text> : null}
+        </View>
+
+        <View style={styles.previewCard}>
+          <Text style={styles.previewTitle}>Recipe Preview</Text>
+          <View style={styles.previewRow}>
+            <Text style={styles.previewLabel}>Name</Text>
+            <Text style={styles.previewValue}>{recipeName.trim() || "Not entered yet"}</Text>
+          </View>
+          <View style={styles.previewRow}>
+            <Text style={styles.previewLabel}>Servings</Text>
+            <Text style={styles.previewValue}>{servings.trim() || "Not entered yet"}</Text>
+          </View>
+          <Text style={styles.previewFootnote}>
+            Review the basics, then continue to add ingredients.
+          </Text>
+        </View>
+
+        <Pressable
+          style={[styles.button, !canContinue && styles.buttonDisabled]}
+          disabled={!canContinue}
+          onPress={() => {
+            setAttemptedContinue(true);
+            if (!canContinue) return;
+
+            startRecipeDraft(recipeName, servings);
+            router.push(
+              `${"/meals/recipes/ingredient-search"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href
+            );
+          }}
         >
-          Continue to Add Ingredient (Coming Next)
-        </Text>
-      </Pressable>
-
-      <Text style={styles.note}>
-        For this checkpoint, this screen stops at recipe draft entry so you can
-        test the UI safely before we wire ingredient search.
-      </Text>
-    </View>
+          <Text style={[styles.buttonText, !canContinue && styles.buttonTextDisabled]}>Continue</Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
-    flex: 1,
     backgroundColor: "#f7f7f7",
     padding: 20,
-    paddingTop: 32,
+    paddingBottom: 160,
   },
   title: {
     fontSize: 28,
@@ -77,23 +133,44 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     color: "#6b7280",
-    marginBottom: 24,
+    lineHeight: 22,
+    marginBottom: 20,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
+  sectionCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
     color: "#111827",
     marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 14,
+    color: "#6b7280",
+    lineHeight: 20,
+    marginBottom: 10,
   },
   input: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#d1d5db",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    marginBottom: 16,
     fontSize: 15,
+    color: "#111827",
+    marginBottom: 10,
+  },
+  errorText: {
+    fontSize: 13,
+    color: "#b91c1c",
+    marginBottom: 14,
   },
   previewCard: {
     backgroundColor: "#ffffff",
@@ -101,18 +178,36 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    marginBottom: 20,
+    marginBottom: 18,
   },
   previewTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  previewText: {
+  previewRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  previewLabel: {
     fontSize: 14,
     color: "#6b7280",
-    marginBottom: 4,
+    fontWeight: "700",
+  },
+  previewValue: {
+    flex: 1,
+    fontSize: 14,
+    color: "#111827",
+    textAlign: "right",
+  },
+  previewFootnote: {
+    fontSize: 13,
+    color: "#6b7280",
+    lineHeight: 19,
+    marginTop: 8,
   },
   button: {
     backgroundColor: "#22c55e",
@@ -130,11 +225,5 @@ const styles = StyleSheet.create({
   },
   buttonTextDisabled: {
     color: "#374151",
-  },
-  note: {
-    marginTop: 16,
-    fontSize: 13,
-    color: "#6b7280",
-    lineHeight: 20,
   },
 });

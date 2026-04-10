@@ -1,8 +1,12 @@
-import { useRouter, type Href } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { useMeals } from "../meals-context";
 
 export default function MealMethodScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { setMealMethod } = useMeals();
 
   const methods = [
     {
@@ -23,14 +27,19 @@ export default function MealMethodScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Choose Logging Method</Text>
       <Text style={styles.subtitle}>
-        Select how you want to add food items for this meal
+        Choose how you want to add items for this meal
       </Text>
 
       {methods.map((method) => (
         <Pressable
           key={method.title}
           style={styles.card}
-          onPress={() => router.push("/meals/log-meal/add-items" as Href)}
+          onPress={() => {
+            setMealMethod(method.title);
+            router.push(
+              `${"/meals/log-meal/add-items"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href
+            );
+          }}
         >
           <Text style={styles.cardTitle}>{method.title}</Text>
           <Text style={styles.cardText}>{method.description}</Text>

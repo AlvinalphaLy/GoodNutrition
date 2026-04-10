@@ -1,8 +1,11 @@
 import { useRouter, type Href } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useMeals } from "../meals-context";
+
 export default function RecipesHubScreen() {
   const router = useRouter();
+  const { beginNewRecipeDraft } = useMeals();
 
   return (
     <View style={styles.container}>
@@ -15,15 +18,16 @@ export default function RecipesHubScreen() {
         style={styles.card}
         onPress={() => router.push("/meals/recipes/view" as Href)}
       >
-        <Text style={styles.cardTitle}>View Existing Recipes</Text>
-        <Text style={styles.cardText}>
-          Browse saved recipes in the app
-        </Text>
+        <Text style={styles.cardTitle}>Existing Recipes</Text>
+        <Text style={styles.cardText}>Browse saved recipes in the app</Text>
       </Pressable>
 
       <Pressable
         style={styles.card}
-        onPress={() => router.push("/meals/recipes/create" as Href)}
+        onPress={() => {
+          beginNewRecipeDraft();
+          router.push(`/meals/recipes/create?returnTo=${encodeURIComponent("/meals/recipes")}` as Href);
+        }}
       >
         <Text style={styles.cardTitle}>Create New Recipe</Text>
         <Text style={styles.cardText}>

@@ -1,8 +1,12 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { useMeals } from "../meals-context";
 
 export default function MealTypeScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { setMealType } = useMeals();
 
   const mealTypes = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
@@ -10,14 +14,19 @@ export default function MealTypeScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Select Meal Type</Text>
       <Text style={styles.subtitle}>
-        Choose the type of meal you want to log
+        Pick the type of meal you&apos;re logging
       </Text>
 
       {mealTypes.map((meal) => (
         <Pressable
           key={meal}
           style={styles.button}
-          onPress={() => router.push("./method")}
+          onPress={() => {
+            setMealType(meal);
+            router.push(
+              `${"/meals/log-meal/method"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href
+            );
+          }}
         >
           <Text style={styles.buttonText}>{meal}</Text>
         </Pressable>
