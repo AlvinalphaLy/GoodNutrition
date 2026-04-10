@@ -1,9 +1,10 @@
 import React from "react";
 import { Pressable, Text, ScrollView, View, StyleSheet } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { Link } from "expo-router";
 
 import { colors } from "../lib/colors";
-import EmptyState from "../components/EmptyState";
+// import EmptyState from "../components/EmptyState";
 
 type CaloriesProps = {
   current: number;
@@ -18,7 +19,6 @@ type MacroProps = {
 
 type LogButtonProps = {
   name: keyof typeof Ionicons.glyphMap;
-  onPress: () => void | Promise<void>;
 };
 
 export default function Index() {
@@ -114,21 +114,18 @@ const LogMeal = () => (
         { justifyContent: "space-around", flexDirection: "row" },
       ]}
     >
-      <LogButton name={"barcode"} onPress={() => console.log("pressed")} />
-      <LogButton name={"search"} onPress={() => console.log("pressed")} />
-      <LogButton name={"mic"} onPress={() => console.log("pressed")} />
-      <LogButton
-        name={"chatbubble-ellipses"}
-        onPress={() => console.log("pressed")}
-      />
+      <LogButton name={"barcode"} />
+      <LogButton name={"search"} />
+      <LogButton name={"mic"} />
+      <LogButton name={"chatbubble-ellipses"} />
     </View>
   </View>
 );
 
-const LogButton = ({ name, onPress }: LogButtonProps) => (
-  <Pressable onPress={onPress}>
+const LogButton = ({ name }: LogButtonProps) => (
+  <Link href={"/barcode-scan"}>
     <Ionicons name={name} size={30} color={colors.textDark} />
-  </Pressable>
+  </Link>
 );
 
 // TODO: Handle empty state
