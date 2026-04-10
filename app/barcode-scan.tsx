@@ -61,7 +61,7 @@ const Camera = () => {
           setScanned(true);
 
           router.push({
-            pathname: "/product-result",
+            pathname: "../product-result",
             params: { code: data },
           });
         }}

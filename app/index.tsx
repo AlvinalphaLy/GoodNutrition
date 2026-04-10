@@ -1,0 +1,20 @@
+import { Link } from "expo-router";
+import React from "react";
+import { Text, View } from "react-native";
+
+export default function Index() {
+  return (
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      <Text>YOU ARE AT THE INDEX SCREEN!</Text>
+      <Link href="/auth/login" push>
+        Login Screen
+      </Link>
+    </View>
+  );
+}

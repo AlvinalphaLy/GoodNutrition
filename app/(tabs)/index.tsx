@@ -123,7 +123,7 @@ const LogMeal = () => (
 );
 
 const LogButton = ({ name }: LogButtonProps) => (
-  <Link href={"/barcode-scan"}>
+  <Link href={"../barcode-scan"}>
     <Ionicons name={name} size={30} color={colors.textDark} />
   </Link>
 );
