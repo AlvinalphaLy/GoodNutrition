@@ -55,10 +55,9 @@ const Camera = () => {
           barcodeTypes: ["upc_a", "upc_e", "ean13"],
         }}
         onBarcodeScanned={({ data }) => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
           if (scanned) return;
 
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setScanned(true);
 
           router.push({
