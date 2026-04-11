@@ -5,6 +5,17 @@ import { Link } from "expo-router";
 
 import { colors } from "../lib/colors";
 
+const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
+  success: { bg: colors.successLight, text: colors.successText },
+  warning: { bg: colors.warningLight, text: colors.warningText },
+  danger: { bg: colors.dangerLight, text: colors.dangerText },
+};
+
+type TagProps = {
+  label: string;
+  variant: "success" | "warning" | "danger";
+};
+
 type CaloriesProps = {
   current: number;
   goal: number;
@@ -23,7 +34,7 @@ type LogButtonProps = {
 
 export default function Index() {
   return (
-    <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
+    <ScrollView contentContainerStyle={styles.scrollContent}>
       <Summary />
       <LogMeal />
       <Meals />
@@ -34,38 +45,21 @@ export default function Index() {
 const Summary = () => (
   <View>
     <Text style={styles.header}>Today&apos;s Summary</Text>
-    <View>
-      <View style={styles.subContainer}>
-        <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
-          <Calories current={1450} goal={2500} />
-          <Macros />
-          <Score rate={2} />
-        </View>
-        <Separator />
-        <HarmfulIngredientsSummary count={2} />
+    <View style={styles.subContainer}>
+      <View style={styles.summaryRow}>
+        <Calories current={1450} goal={2500} />
+        <Macros />
+        <Score rate={2} />
       </View>
+      <Separator />
+      <HarmfulIngredientsSummary count={2} />
     </View>
   </View>
 );
 
 const HarmfulIngredientsSummary = ({ count }: { count: number }) => (
-  <Pressable
-    style={{
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginHorizontal: 12,
-    }}
-    onPress={() => console.log("pressed")}
-  >
-    <Text
-      style={{
-        color: colors.danger,
-        fontStyle: "italic",
-        textDecorationLine: "underline",
-      }}
-    >
-      {count} harmful ingredients detected
-    </Text>
+  <Pressable style={styles.harmfulRow} onPress={() => console.log("pressed")}>
+    <Text style={styles.harmfulText}>{count} harmful ingredients detected</Text>
     <Ionicons name="chevron-forward" size={18} color={colors.textMedium} />
   </Pressable>
 );
@@ -82,104 +76,152 @@ const Score = ({ rate }: { rate: number }) => (
 const Calories = ({ current, goal }: CaloriesProps) => (
   <View>
     <Text style={styles.subHeader}>CALORIES</Text>
-    <Text style={{ fontWeight: "bold", fontSize: 30 }}>{current}</Text>
+    <Text style={styles.caloriesNumber}>{current}</Text>
     <Text> / {goal}</Text>
   </View>
 );
 
-// NOTE: How are we going to pass each macro info?
 const Macros = () => (
   <View>
     <Text style={styles.subHeader}>MACROS</Text>
     <View style={styles.macrosContainer}>
-      <MacroNutrient nutrient={"Protein"} current={120} goal={160} />
-      <MacroNutrient nutrient={"Carbs"} current={150} goal={200} />
-      <MacroNutrient nutrient={"Fats"} current={44} goal={77} />
+      <MacroNutrient nutrient="Protein" current={120} goal={160} />
+      <MacroNutrient nutrient="Carbs" current={150} goal={200} />
+      <MacroNutrient nutrient="Fats" current={44} goal={77} />
     </View>
   </View>
 );
 
 const MacroNutrient = ({ nutrient, current, goal }: MacroProps) => (
   <Text>
-    {nutrient}: <Text style={{ fontWeight: "bold" }}>{current}g</Text> / {goal}g
+    {nutrient}: <Text style={styles.macroBold}>{current}g</Text> / {goal}g
   </Text>
 );
 
 const LogMeal = () => (
   <View>
     <Text style={styles.header}>Log Meal</Text>
-    <View
-      style={[
-        styles.subContainer,
-        { justifyContent: "space-around", flexDirection: "row" },
-      ]}
-    >
-      <LogButton name={"barcode"} path="barcode-scan" />
-      <LogButton name={"search"} path="" />
-      <LogButton name={"mic"} path="" />
-      <LogButton name={"chatbubble-ellipses"} path="" />
+    <View style={[styles.subContainer, styles.logMealRow]}>
+      <LogButton name="barcode" path="barcode-scan" />
+      <LogButton name="search" path="" />
+      <LogButton name="mic" path="" />
+      <LogButton name="chatbubble-ellipses" path="" />
     </View>
   </View>
 );
 
 const LogButton = ({ name, path }: LogButtonProps) => (
   <Link href={`../${path}`}>
-    <Ionicons name={name} size={30} color={colors.textDark} />
+    <Ionicons name={name} size={28} color={colors.textDark} />
   </Link>
 );
 
-// TODO: Handle empty state
+const meals: mealCardProps[] = [
+  {
+    mealType: "BREAKFAST",
+    calories: 450,
+    time: "8:34 AM",
+    macros: { protein: 24, carbs: 58, fats: 12 },
+    tags: [{ label: "High fiber", variant: "success" }],
+  },
+  {
+    mealType: "LUNCH",
+    calories: 680,
+    time: "1:00 PM",
+    macros: { protein: 58, carbs: 64, fats: 24 },
+    tags: [{ label: "Moderate sodium", variant: "warning" }],
+  },
+];
+
 const Meals = () => (
   <View>
     <Text style={styles.header}>Today&apos;s Meals</Text>
-    {/* <EmptyState /> */}
-    <View style={{ marginVertical: 10 }}>
-      <MealCard mealType="BREAKFAST" />
-      <MealCard mealType="LUNCH" />
-      <MealCard mealType="DINNER" />
-      <MealCard mealType="SNACK" />
+    <View style={styles.mealsWrapper}>
+      {meals.length === 0 ? (
+        <Text style={styles.emptyState}>No meals logged yet today.</Text>
+      ) : (
+        meals.map((meal) => <MealCard key={meal.mealType} {...meal} />)
+      )}
     </View>
   </View>
 );
 
 type mealCardProps = {
-  mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
+  mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACKS";
+  calories: number;
+  time: string;
+  macros: { protein: number; carbs: number; fats: number };
+  tags: { label: string; variant: "success" | "warning" | "danger" }[];
 };
 
-const MealCard = ({ mealType }: mealCardProps) => (
-  <View style={{ marginVertical: 5 }}>
-    <Text style={{ color: colors.textLight, fontSize: 14 }}>{mealType}</Text>
+const MealCard = ({
+  mealType,
+  calories,
+  time,
+  macros,
+  tags,
+}: mealCardProps) => (
+  <View>
+    <Text style={styles.mealTypeLabel}>{mealType}</Text>
     <View style={styles.subContainer}>
-      <Text style={{ fontSize: 20, fontWeight: "bold" }}>450kcal</Text>
+      <View style={styles.mealTopRow}>
+        <Text style={styles.mealCalories}>
+          {calories} <Text style={styles.mealKcal}>kcal</Text>
+        </Text>
+        <Text style={styles.mealTime}>{time}</Text>
+      </View>
+      <View style={styles.mealMacrosRow}>
+        <Text style={styles.mealMacroValue}>
+          {macros.protein}g <Text style={styles.mealMacroLabel}>protein</Text>
+        </Text>
+        <Text style={styles.mealMacroValue}>
+          {macros.carbs}g <Text style={styles.mealMacroLabel}>carbs</Text>
+        </Text>
+        <Text style={styles.mealMacroValue}>
+          {macros.fats}g <Text style={styles.mealMacroLabel}>fats</Text>
+        </Text>
+        <Ionicons
+          name="chevron-forward"
+          size={24}
+          color={colors.textMedium}
+          style={{ marginLeft: "auto" }}
+        />
+      </View>
+      <View style={styles.tagsRow}>
+        {tags.map((tag, i) => (
+          <Tag key={i} label={tag.label} variant={tag.variant} />
+        ))}
+      </View>
     </View>
   </View>
 );
 
-const Separator = () => (
-  <View
-    style={{
-      height: 1,
-      width: "95%",
-      backgroundColor: colors.textLight,
-      marginVertical: 14,
-      alignSelf: "center",
-    }}
-  />
+const Tag = ({ label, variant }: TagProps) => (
+  <View style={[styles.tag, { backgroundColor: TAG_COLORS[variant].bg }]}>
+    <Text style={[styles.tagText, { color: TAG_COLORS[variant].text }]}>
+      {label}
+    </Text>
+  </View>
 );
 
+const Separator = () => <View style={styles.separator} />;
+
 const styles = StyleSheet.create({
+  scrollContent: {
+    gap: 12,
+    padding: 15,
+  },
   header: {
     fontSize: 18,
     fontWeight: "bold",
   },
   subHeader: {
     color: colors.textMedium,
-    marginBottom: 5,
+    marginBottom: 3,
   },
   subContainer: {
-    justifyContent: "space-around",
-    marginTop: 8,
-    padding: 15,
+    marginVertical: 8,
+    padding: 12,
     borderRadius: 12,
     backgroundColor: colors.cardBg,
     shadowColor: "#000",
@@ -188,10 +230,30 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  harmfulRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginHorizontal: 10,
+  },
+  harmfulText: {
+    color: colors.danger,
+    fontStyle: "italic",
+    textDecorationLine: "underline",
+  },
+  caloriesNumber: {
+    fontWeight: "bold",
+    fontSize: 28,
+  },
   macrosContainer: {
     gap: 3,
   },
-  //TODO: move bg color somewhere else
+  macroBold: {
+    fontWeight: "bold",
+  },
   circle: {
     width: 50,
     height: 50,
@@ -204,5 +266,73 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 18,
     color: colors.white,
+  },
+  logMealRow: {
+    justifyContent: "space-around",
+    flexDirection: "row",
+  },
+  mealsWrapper: {
+    marginVertical: 10,
+  },
+  mealTypeLabel: {
+    color: colors.textLight,
+    fontSize: 14,
+  },
+  mealTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  mealCalories: {
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+  mealKcal: {
+    fontSize: 14,
+    color: colors.textMedium,
+    fontWeight: "normal",
+  },
+  mealTime: {
+    color: colors.textMedium,
+  },
+  mealMacrosRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  mealMacroValue: {
+    fontWeight: "bold",
+  },
+  mealMacroLabel: {
+    color: colors.textMedium,
+    fontWeight: "normal",
+  },
+  separator: {
+    height: 1,
+    width: "95%",
+    backgroundColor: colors.textLight,
+    marginVertical: 14,
+    alignSelf: "center",
+  },
+  tag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+  },
+  emptyState: {
+    color: colors.textLight,
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
   },
 });
