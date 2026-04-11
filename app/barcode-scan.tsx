@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { colors } from "./lib/colors";
 
@@ -37,6 +38,10 @@ export default function BarcodeScan() {
 
 const Camera = () => {
   const [scanned, setScanned] = useState(false);
+  const [torch, setTorch] = useState(false);
+  const [flashType, setFlashType] = useState<"flash" | "flash-off">(
+    "flash-off",
+  );
   const router = useRouter();
 
   // Reset state when moving back from product-result
@@ -51,6 +56,7 @@ const Camera = () => {
       <CameraView
         style={styles.camera}
         facing={"back"}
+        enableTorch={torch}
         barcodeScannerSettings={{
           barcodeTypes: ["upc_a", "upc_e", "ean13"],
         }}
@@ -66,13 +72,24 @@ const Camera = () => {
           });
         }}
       />
+      <View style={styles.bottomBar}>
+        <Pressable
+          style={styles.flashContainer}
+          onPress={() => {
+            setTorch(!torch);
+            setFlashType(torch ? "flash-off" : "flash");
+          }}
+        >
+          <Ionicons name={flashType} size={34} color="black" />
+          <Text style={styles.flashText}>FLASH</Text>
+        </Pressable>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 30,
     flex: 1,
     justifyContent: "center",
   },
@@ -82,8 +99,20 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   camera: {
+    flex: 10,
+  },
+  bottomBar: {
+    padding: 22,
     flex: 1,
-    borderRadius: 12,
+  },
+  flashContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  flashText: {
+    marginLeft: 6,
+    fontSize: 16,
+    color: colors.textMedium,
   },
   button: {
     backgroundColor: colors.primary,
