@@ -65,6 +65,7 @@ const Camera = () => {
 
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setScanned(true);
+          setTorch(false);
 
           router.push({
             pathname: "../product-result",
@@ -72,18 +73,16 @@ const Camera = () => {
           });
         }}
       />
-      <View style={styles.bottomBar}>
-        <Pressable
-          style={styles.flashContainer}
-          onPress={() => {
-            setTorch(!torch);
-            setFlashType(torch ? "flash-off" : "flash");
-          }}
-        >
-          <Ionicons name={flashType} size={34} color="black" />
-          <Text style={styles.flashText}>FLASH</Text>
-        </Pressable>
-      </View>
+      <View style={styles.scanner} />
+      <Pressable
+        style={styles.flashlight}
+        onPress={() => {
+          setTorch(!torch);
+          setFlashType(torch ? "flash-off" : "flash");
+        }}
+      >
+        <Ionicons name={flashType} size={28} color={colors.white} />
+      </Pressable>
     </View>
   );
 };
@@ -99,20 +98,22 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   camera: {
-    flex: 10,
-  },
-  bottomBar: {
-    padding: 22,
     flex: 1,
   },
-  flashContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  scanner: {
+    position: "absolute",
+    borderStyle: "dashed",
+    borderColor: colors.white,
+    borderWidth: 3,
+    borderRadius: 12,
+    width: "80%",
+    height: "20%",
+    alignSelf: "center",
   },
-  flashText: {
-    marginLeft: 6,
-    fontSize: 16,
-    color: colors.textMedium,
+  flashlight: {
+    position: "absolute",
+    bottom: "6%",
+    right: "10%",
   },
   button: {
     backgroundColor: colors.primary,

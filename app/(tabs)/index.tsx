@@ -11,6 +11,14 @@ const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
   danger: { bg: colors.dangerLight, text: colors.dangerText },
 };
 
+type MealCardProps = {
+  mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACKS";
+  calories: number;
+  time: string;
+  macros: { protein: number; carbs: number; fats: number };
+  tags: { label: string; variant: "success" | "warning" | "danger" }[];
+};
+
 type TagProps = {
   label: string;
   variant: "success" | "warning" | "danger";
@@ -116,21 +124,22 @@ const LogButton = ({ name, path }: LogButtonProps) => (
   </Link>
 );
 
-const meals: mealCardProps[] = [
-  {
-    mealType: "BREAKFAST",
-    calories: 450,
-    time: "8:34 AM",
-    macros: { protein: 24, carbs: 58, fats: 12 },
-    tags: [{ label: "High fiber", variant: "success" }],
-  },
-  {
-    mealType: "LUNCH",
-    calories: 680,
-    time: "1:00 PM",
-    macros: { protein: 58, carbs: 64, fats: 24 },
-    tags: [{ label: "Moderate sodium", variant: "warning" }],
-  },
+// Dummy Data
+const meals: MealCardProps[] = [
+  // {
+  //   mealType: "BREAKFAST",
+  //   calories: 450,
+  //   time: "8:34 AM",
+  //   macros: { protein: 24, carbs: 58, fats: 12 },
+  //   tags: [{ label: "High fiber", variant: "success" }],
+  // },
+  // {
+  //   mealType: "LUNCH",
+  //   calories: 680,
+  //   time: "1:00 PM",
+  //   macros: { protein: 58, carbs: 64, fats: 24 },
+  //   tags: [{ label: "Moderate sodium", variant: "warning" }],
+  // },
 ];
 
 const Meals = () => (
@@ -146,21 +155,13 @@ const Meals = () => (
   </View>
 );
 
-type mealCardProps = {
-  mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACKS";
-  calories: number;
-  time: string;
-  macros: { protein: number; carbs: number; fats: number };
-  tags: { label: string; variant: "success" | "warning" | "danger" }[];
-};
-
 const MealCard = ({
   mealType,
   calories,
   time,
   macros,
   tags,
-}: mealCardProps) => (
+}: MealCardProps) => (
   <View>
     <Text style={styles.mealTypeLabel}>{mealType}</Text>
     <View style={styles.subContainer}>
