@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { useState, useEffect } from "react";
 
@@ -63,7 +64,7 @@ const novaStyle = (novaGroup: number | null) => {
 };
 
 export default function Product() {
-  const { code } = useLocalSearchParams();
+  const { code } = useLocalSearchParams<{ code?: string }>();
   const [product, setProduct] = useState<ProductResult | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("serving");
   const [grams, setGrams] = useState("100");
@@ -71,18 +72,18 @@ export default function Product() {
 
   useEffect(() => {
     async function load() {
+      if (!code) return <Text>Whoops, no code found.</Text>;
       const data = await getData(code);
-      if (data) {
-        setProduct(data);
-      }
+      if (data) setProduct(data);
     }
+
     load();
   }, [code]);
 
   if (!product) {
     return (
-      <View>
-        <Text style={styles.loading}>Loading...</Text>
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color={colors.primaryBlue} />
       </View>
     );
   }
@@ -407,15 +408,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    padding: 16,
+    padding: 10,
     gap: 12,
   },
-  loading: {
-    color: colors.textMedium,
-    textAlign: "center",
-    marginTop: 40,
+  loader: {
+    flex: 1,
     justifyContent: "center",
-    alignItems: "center",
   },
   card: {
     backgroundColor: colors.white,

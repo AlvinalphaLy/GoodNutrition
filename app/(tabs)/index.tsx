@@ -210,7 +210,7 @@ const Separator = () => <View style={styles.separator} />;
 const styles = StyleSheet.create({
   scrollContent: {
     gap: 12,
-    padding: 15,
+    padding: 10,
   },
   header: {
     fontSize: 18,
