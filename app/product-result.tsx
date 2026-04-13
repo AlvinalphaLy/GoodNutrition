@@ -55,14 +55,6 @@ type IngredientsProps = {
   ingredientsText: ProductResult["product"]["ingredients_text"];
 };
 
-const novaStyle = (novaGroup: number | null) => {
-  if (novaGroup === 1) return { bg: colors.nova1Light, text: colors.nova1Text };
-  if (novaGroup === 2) return { bg: colors.nova2Light, text: colors.nova2Text };
-  if (novaGroup === 3) return { bg: colors.nova3Light, text: colors.nova3Text };
-  if (novaGroup === 4) return { bg: colors.nova4Light, text: colors.nova4Text };
-  return { bg: colors.background, text: colors.textMedium };
-};
-
 export default function Product() {
   const { code } = useLocalSearchParams<{ code?: string }>();
   const [product, setProduct] = useState<ProductResult | null>(null);
@@ -88,11 +80,12 @@ export default function Product() {
     );
   }
 
+  // Destructure product so we don't have to awkwardly write product.product
   const { product: details } = product;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <ProductBrand
+      <ProductSummary
         productName={details.product_name}
         productBrand={details.brands}
         nutriScore={details.nutriscore_grade}
@@ -120,13 +113,14 @@ export default function Product() {
   );
 }
 
-const ProductBrand = ({
+const ProductSummary = ({
   productName,
   productBrand,
   nutriScore,
   novaGroup,
 }: ProductBrandProps) => {
   const nova = novaStyle(novaGroup);
+  const nutri = nutriStyle(nutriScore);
   const isNotApplicable = !nutriScore || nutriScore === "not-applicable";
 
   return (
@@ -138,18 +132,16 @@ const ProductBrand = ({
           style={[
             styles.badge,
             {
-              backgroundColor: isNotApplicable
-                ? colors.background
-                : colors.successLight,
+              backgroundColor: isNotApplicable ? colors.background : nutri?.bg,
               borderWidth: 1,
-              borderColor: isNotApplicable ? colors.border : colors.success,
+              borderColor: isNotApplicable ? colors.border : nutri?.text,
             },
           ]}
         >
           <Text
             style={{
               fontSize: 11,
-              color: isNotApplicable ? colors.textMedium : colors.successText,
+              color: isNotApplicable ? colors.textMedium : nutri?.text,
             }}
           >
             {isNotApplicable
@@ -262,27 +254,13 @@ const Calories = ({
           {activeTab === "100g" ? "g" : "servings"}
         </Text>
       </View>
-      <Pressable style={styles.logButton} onPress={logMeal}>
+      <Pressable style={styles.logButton}>
         <Text style={styles.logButtonText}>
           {activeTab === "100g" ? "Log by gram" : "Log by serving"}
         </Text>
       </Pressable>
     </View>
   );
-};
-
-type logMeal = {};
-
-const logMeal = () => {};
-
-const levelStyle = (level: string | null | undefined) => {
-  if (level === "high")
-    return { badge: styles.badgeDanger, text: styles.badgeDangerText };
-  if (level === "moderate")
-    return { badge: styles.badgeWarning, text: styles.badgeWarningText };
-  if (level === "low")
-    return { badge: styles.badgeSuccess, text: styles.badgeSuccessText };
-  return { badge: styles.badgeNeutral, text: styles.badgeNeutralText };
 };
 
 const NutrientLevels = ({ nutrientLevels }: NutrientLevelsProps) => {
@@ -400,6 +378,39 @@ const Ingredients = ({ ingredientsText }: IngredientsProps) => {
       <Text style={styles.ingredientsText}>{ingredientsText}</Text>
     </View>
   );
+};
+
+/* STYLES */
+
+const levelStyle = (level: string | null | undefined) => {
+  if (level === "high")
+    return { badge: styles.badgeDanger, text: styles.badgeDangerText };
+  if (level === "moderate")
+    return { badge: styles.badgeWarning, text: styles.badgeWarningText };
+  if (level === "low")
+    return { badge: styles.badgeSuccess, text: styles.badgeSuccessText };
+  return { badge: styles.badgeNeutral, text: styles.badgeNeutralText };
+};
+
+const novaStyle = (novaGroup: number | null) => {
+  if (novaGroup === 1) return { bg: colors.nova1Light, text: colors.nova1Text };
+  if (novaGroup === 2) return { bg: colors.nova2Light, text: colors.nova2Text };
+  if (novaGroup === 3) return { bg: colors.nova3Light, text: colors.nova3Text };
+  if (novaGroup === 4) return { bg: colors.nova4Light, text: colors.nova4Text };
+  return { bg: colors.background, text: colors.textMedium };
+};
+
+const nutriStyle = (nutriScore: string | null) => {
+  if (nutriScore === "a")
+    return { bg: colors.nutriALight, text: colors.nutriA };
+  if (nutriScore === "b")
+    return { bg: colors.nutriBLight, text: colors.nutriB };
+  if (nutriScore === "c")
+    return { bg: colors.nutriCLight, text: colors.nutriC };
+  if (nutriScore === "d")
+    return { bg: colors.nutriDLight, text: colors.nutriD };
+  if (nutriScore === "e")
+    return { bg: colors.nutriELight, text: colors.nutriE };
 };
 
 const styles = StyleSheet.create({
