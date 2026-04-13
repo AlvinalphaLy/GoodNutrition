@@ -126,20 +126,20 @@ const LogButton = ({ name, path }: LogButtonProps) => (
 
 // Dummy Data
 const meals: MealCardProps[] = [
-  // {
-  //   mealType: "BREAKFAST",
-  //   calories: 450,
-  //   time: "8:34 AM",
-  //   macros: { protein: 24, carbs: 58, fats: 12 },
-  //   tags: [{ label: "High fiber", variant: "success" }],
-  // },
-  // {
-  //   mealType: "LUNCH",
-  //   calories: 680,
-  //   time: "1:00 PM",
-  //   macros: { protein: 58, carbs: 64, fats: 24 },
-  //   tags: [{ label: "Moderate sodium", variant: "warning" }],
-  // },
+  {
+    mealType: "BREAKFAST",
+    calories: 450,
+    time: "8:34 AM",
+    macros: { protein: 24, carbs: 58, fats: 12 },
+    tags: [{ label: "High fiber", variant: "success" }],
+  },
+  {
+    mealType: "LUNCH",
+    calories: 680,
+    time: "1:00 PM",
+    macros: { protein: 58, carbs: 64, fats: 24 },
+    tags: [{ label: "Moderate sodium", variant: "warning" }],
+  },
 ];
 
 const Meals = () => (
