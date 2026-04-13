@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useState, useEffect } from "react";
 
-import getData, { ProductResult } from "./api/openFoodFacts";
+import { getData, ProductResult } from "./api/openFoodFacts";
 import { colors } from "./lib/colors";
 
 type TabType = "serving" | "100g";
@@ -255,7 +255,7 @@ const Calories = ({
           {activeTab === "100g" ? "g" : "servings"}
         </Text>
       </View>
-      <Pressable style={styles.logButton}>
+      <Pressable style={styles.logButton} onPress={logMeal}>
         <Text style={styles.logButtonText}>
           {activeTab === "100g" ? "Log by gram" : "Log by serving"}
         </Text>
@@ -263,6 +263,10 @@ const Calories = ({
     </View>
   );
 };
+
+type logMeal = {};
+
+const logMeal = () => {};
 
 const levelStyle = (level: string | null | undefined) => {
   if (level === "high")

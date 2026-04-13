@@ -40,7 +40,7 @@ export type ProductResult = {
   };
 };
 
-export default async function getData(query: string | string[]) {
+export const getData = async (query: string | string[]) => {
   const url = `https://world.openfoodfacts.net/api/v2/product/${query}?fields=product_name,brands,nutriscore_grade,nutriscore_score,nova_group,ingredients_text,additives_tags,allergens_tags,nutrient_levels,ingredients_analysis_tags,image_url,serving_size,nutriments.energy-kcal_100g,nutriments.proteins_100g,nutriments.carbohydrates_100g,nutriments.fat_100g,nutriments.saturated-fat_100g,nutriments.sugars_100g,nutriments.fiber_100g,nutriments.salt_100g,nutriments.sodium_100g,nutriments.energy-kcal_serving,nutriments.proteins_serving,nutriments.carbohydrates_serving,nutriments.fat_serving,nutriments.sugars_serving,nutriments.fiber_serving,nutriments.salt_serving,status_verbose`;
 
   let result;
@@ -57,4 +57,4 @@ export default async function getData(query: string | string[]) {
     console.log(error);
   }
   return result;
-}
+};
