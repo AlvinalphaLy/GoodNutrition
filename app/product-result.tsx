@@ -79,7 +79,13 @@ export default function Product() {
     load();
   }, [code]);
 
-  if (!product) return <Text style={styles.loading}>Loading...</Text>;
+  if (!product) {
+    return (
+      <View>
+        <Text style={styles.loading}>Loading...</Text>
+      </View>
+    );
+  }
 
   const { product: details } = product;
 
@@ -408,6 +414,8 @@ const styles = StyleSheet.create({
     color: colors.textMedium,
     textAlign: "center",
     marginTop: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
   card: {
     backgroundColor: colors.white,
@@ -427,24 +435,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerLight,
   },
   dangerCardTitle: {
-    fontSize: 12,
     fontWeight: "500",
     color: colors.dangerText,
   },
   dangerCardText: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.dangerText,
   },
   detectedContainer: {
     flexDirection: "row",
   },
   productName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "bold",
     color: colors.textDark,
   },
   brandName: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.textMedium,
   },
   badgeRow: {
@@ -463,15 +470,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   badgeSuccess: { backgroundColor: colors.successLight },
-  badgeSuccessText: { fontSize: 11, color: colors.successText },
+  badgeSuccessText: { fontSize: 12, color: colors.successText },
   badgeWarning: { backgroundColor: colors.warningLight },
-  badgeWarningText: { fontSize: 11, color: colors.warningText },
+  badgeWarningText: { fontSize: 12, color: colors.warningText },
   badgeDanger: { backgroundColor: colors.dangerLight },
-  badgeDangerText: { fontSize: 11, color: colors.dangerText },
+  badgeDangerText: { fontSize: 12, color: colors.dangerText },
   badgeNeutral: { backgroundColor: colors.background },
-  badgeNeutralText: { fontSize: 11, color: colors.textMedium },
+  badgeNeutralText: { fontSize: 12, color: colors.textMedium },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 16,
     color: colors.textMedium,
     marginBottom: 4,
   },
@@ -497,24 +504,23 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   tabText: {
-    fontSize: 12,
     color: colors.textMedium,
   },
   tabTextActive: {
     color: colors.textDark,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   calItem: {
     alignItems: "center",
     paddingVertical: 4,
   },
   calNumber: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: "500",
     color: colors.textDark,
   },
   calLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textLight,
   },
   nutrientRow: {
@@ -524,7 +530,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   nutrientLabel: {
-    fontSize: 12,
     color: colors.textDark,
   },
   macroHeaderRow: {
@@ -541,7 +546,6 @@ const styles = StyleSheet.create({
   },
   macroCell: {
     flex: 1,
-    fontSize: 12,
     color: colors.textDark,
   },
   macroHeaderCell: {
@@ -552,7 +556,6 @@ const styles = StyleSheet.create({
   },
   macroValueCell: {
     flex: 1,
-    fontSize: 12,
     color: colors.textDark,
     textAlign: "right",
   },
@@ -565,9 +568,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
+    justifyContent: "center",
   },
   logInput: {
-    flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
