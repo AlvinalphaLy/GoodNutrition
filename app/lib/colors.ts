@@ -33,4 +33,14 @@ export const colors = {
 
   // Borders
   border: "#E5E7EB",
+
+  // Nova group (1 → 4)
+  nova1Light: "#D1FAE5",
+  nova1Text: "#065F46",
+  nova2Light: "#FEF9C3",
+  nova2Text: "#713F12",
+  nova3Light: "#FFEDD5",
+  nova3Text: "#9A3412",
+  nova4Light: "#FEE2E2",
+  nova4Text: "#991B1B",
 };

@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import getData, { ProductResult } from "./api/openFoodFacts";
 import { colors } from "./lib/colors";
 
-type TabType = "100g" | "serving";
+type TabType = "serving" | "100g";
 
 type ProductBrandProps = {
   productName: ProductResult["product"]["product_name"];
@@ -171,7 +171,12 @@ const Calories = ({
           style={[styles.tab, activeTab === "100g" && styles.tabActive]}
           onPress={() => onTabChange("100g")}
         >
-          <Text style={[styles.tabText, activeTab === "100g" && styles.tabTextActive]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "100g" && styles.tabTextActive,
+            ]}
+          >
             Per 100g
           </Text>
         </Pressable>
@@ -179,7 +184,12 @@ const Calories = ({
           style={[styles.tab, activeTab === "serving" && styles.tabActive]}
           onPress={() => onTabChange("serving")}
         >
-          <Text style={[styles.tabText, activeTab === "serving" && styles.tabTextActive]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "serving" && styles.tabTextActive,
+            ]}
+          >
             Per serving
           </Text>
         </Pressable>
@@ -254,11 +264,31 @@ const NutrientLevels = ({ nutrientLevels }: NutrientLevelsProps) => {
 
 const Macros = ({ nutriments, activeTab }: MacrosProps) => {
   const rows = [
-    { label: "Proteins", per100g: nutriments.proteins_100g, perServing: nutriments.proteins_serving },
-    { label: "Carbohydrates", per100g: nutriments.carbohydrates_100g, perServing: nutriments.carbohydrates_serving },
-    { label: "Fat", per100g: nutriments.fat_100g, perServing: nutriments.fat_serving },
-    { label: "Fiber", per100g: nutriments.fiber_100g, perServing: nutriments.fiber_serving },
-    { label: "Salt", per100g: nutriments.salt_100g, perServing: nutriments.salt_serving },
+    {
+      label: "Proteins",
+      per100g: nutriments.proteins_100g,
+      perServing: nutriments.proteins_serving,
+    },
+    {
+      label: "Carbohydrates",
+      per100g: nutriments.carbohydrates_100g,
+      perServing: nutriments.carbohydrates_serving,
+    },
+    {
+      label: "Fat",
+      per100g: nutriments.fat_100g,
+      perServing: nutriments.fat_serving,
+    },
+    {
+      label: "Fiber",
+      per100g: nutriments.fiber_100g,
+      perServing: nutriments.fiber_serving,
+    },
+    {
+      label: "Salt",
+      per100g: nutriments.salt_100g,
+      perServing: nutriments.salt_serving,
+    },
   ];
 
   return (
