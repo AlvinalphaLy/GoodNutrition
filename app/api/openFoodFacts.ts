@@ -17,7 +17,7 @@ export type ProductResult = {
       salt: "low" | "moderate" | "high" | null;
     } | null;
     ingredients_analysis_tags: string[] | null;
-    image_url: string | null;
+    // image_url: string | null;
     serving_size: string | null;
     nutriments: {
       "energy-kcal_100g": number | null;
