@@ -54,10 +54,18 @@ type IngredientsProps = {
   ingredientsText: ProductResult["product"]["ingredients_text"];
 };
 
+const novaStyle = (novaGroup: number | null) => {
+  if (novaGroup === 1) return { bg: colors.nova1Light, text: colors.nova1Text };
+  if (novaGroup === 2) return { bg: colors.nova2Light, text: colors.nova2Text };
+  if (novaGroup === 3) return { bg: colors.nova3Light, text: colors.nova3Text };
+  if (novaGroup === 4) return { bg: colors.nova4Light, text: colors.nova4Text };
+  return { bg: colors.background, text: colors.textMedium };
+};
+
 export default function Product() {
   const { code } = useLocalSearchParams();
   const [product, setProduct] = useState<ProductResult | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>("100g");
+  const [activeTab, setActiveTab] = useState<TabType>("serving");
   const [grams, setGrams] = useState("100");
   const [servings, setServings] = useState("1");
 
@@ -111,21 +119,51 @@ const ProductBrand = ({
   nutriScore,
   novaGroup,
 }: ProductBrandProps) => {
+  const nova = novaStyle(novaGroup);
+  const isNotApplicable = !nutriScore || nutriScore === "not-applicable";
+
   return (
     <View style={styles.card}>
       <Text style={styles.productName}>{productName}</Text>
       <Text style={styles.brandName}>{productBrand ?? "Unknown brand"}</Text>
       <View style={styles.badgeRow}>
-        {nutriScore && (
-          <View style={[styles.badge, styles.badgeSuccess]}>
-            <Text style={styles.badgeSuccessText}>
-              Nutri-score {nutriScore.toUpperCase()}
-            </Text>
-          </View>
-        )}
+        <View
+          style={[
+            styles.badge,
+            {
+              backgroundColor: isNotApplicable
+                ? colors.background
+                : colors.successLight,
+              borderWidth: 1,
+              borderColor: isNotApplicable ? colors.border : colors.success,
+            },
+          ]}
+        >
+          <Text
+            style={{
+              fontSize: 11,
+              color: isNotApplicable ? colors.textMedium : colors.successText,
+            }}
+          >
+            {isNotApplicable
+              ? "Nutri-score N/A"
+              : `Nutri-score ${nutriScore.toUpperCase()}`}
+          </Text>
+        </View>
         {novaGroup && (
-          <View style={[styles.badge, styles.badgeWarning]}>
-            <Text style={styles.badgeWarningText}>NOVA {novaGroup}</Text>
+          <View
+            style={[
+              styles.badge,
+              {
+                backgroundColor: nova.bg,
+                borderWidth: 1,
+                borderColor: nova.text,
+              },
+            ]}
+          >
+            <Text style={{ fontSize: 11, color: nova.text }}>
+              NOVA {novaGroup}
+            </Text>
           </View>
         )}
       </View>
@@ -168,19 +206,6 @@ const Calories = ({
       <Text style={styles.sectionLabel}>Calories</Text>
       <View style={styles.tabRow}>
         <Pressable
-          style={[styles.tab, activeTab === "100g" && styles.tabActive]}
-          onPress={() => onTabChange("100g")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "100g" && styles.tabTextActive,
-            ]}
-          >
-            Per 100g
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.tab, activeTab === "serving" && styles.tabActive]}
           onPress={() => onTabChange("serving")}
         >
@@ -191,6 +216,19 @@ const Calories = ({
             ]}
           >
             Per serving
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === "100g" && styles.tabActive]}
+          onPress={() => onTabChange("100g")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "100g" && styles.tabTextActive,
+            ]}
+          >
+            Per gram
           </Text>
         </Pressable>
       </View>
@@ -278,6 +316,16 @@ const Macros = ({ nutriments, activeTab }: MacrosProps) => {
       label: "Fat",
       per100g: nutriments.fat_100g,
       perServing: nutriments.fat_serving,
+    },
+    {
+      label: "Saturated fat",
+      per100g: nutriments["saturated-fat_100g"],
+      // perServing: nutriments["saturated-fat_serving"] ?? null,
+    },
+    {
+      label: "Sugars",
+      per100g: nutriments.sugars_100g,
+      perServing: nutriments.sugars_serving,
     },
     {
       label: "Fiber",
