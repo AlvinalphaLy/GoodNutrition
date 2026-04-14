@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { colors } from "./lib/colors";
 
@@ -37,6 +38,10 @@ export default function BarcodeScan() {
 
 const Camera = () => {
   const [scanned, setScanned] = useState(false);
+  const [torch, setTorch] = useState(false);
+  const [flashType, setFlashType] = useState<"flash" | "flash-off">(
+    "flash-off",
+  );
   const router = useRouter();
 
   // Reset state when moving back from product-result
@@ -51,6 +56,7 @@ const Camera = () => {
       <CameraView
         style={styles.camera}
         facing={"back"}
+        enableTorch={torch}
         barcodeScannerSettings={{
           barcodeTypes: ["upc_a", "upc_e", "ean13"],
         }}
@@ -59,6 +65,7 @@ const Camera = () => {
 
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setScanned(true);
+          setTorch(false);
 
           router.push({
             pathname: "../product-result",
@@ -66,13 +73,22 @@ const Camera = () => {
           });
         }}
       />
+      <View style={styles.scanner} />
+      <Pressable
+        style={styles.flashlight}
+        onPress={() => {
+          setTorch(!torch);
+          setFlashType(torch ? "flash-off" : "flash");
+        }}
+      >
+        <Ionicons name={flashType} size={28} color={colors.white} />
+      </Pressable>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 30,
     flex: 1,
     justifyContent: "center",
   },
@@ -83,7 +99,21 @@ const styles = StyleSheet.create({
   },
   camera: {
     flex: 1,
+  },
+  scanner: {
+    position: "absolute",
+    borderStyle: "dashed",
+    borderColor: colors.white,
+    borderWidth: 3,
     borderRadius: 12,
+    width: "80%",
+    height: "20%",
+    alignSelf: "center",
+  },
+  flashlight: {
+    position: "absolute",
+    bottom: "6%",
+    right: "10%",
   },
   button: {
     backgroundColor: colors.primary,
