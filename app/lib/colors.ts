@@ -33,4 +33,26 @@ export const colors = {
 
   // Borders
   border: "#E5E7EB",
+
+  // Nova group
+  nova1Light: "#D1FAE5",
+  nova1Text: "#065F46",
+  nova2Light: "#FEF9C3",
+  nova2Text: "#713F12",
+  nova3Light: "#FFEDD5",
+  nova3Text: "#9A3412",
+  nova4Light: "#FEE2E2",
+  nova4Text: "#991B1B",
+
+  // Nutri score
+  nutriA: "#065F46",
+  nutriALight: "#D1FAE5",
+  nutriB: "#4D7C0F",
+  nutriBLight: "#ECFCCB",
+  nutriC: "#713F12",
+  nutriCLight: "#FEF9C3A",
+  nutriD: "#9A3412",
+  nutriDLight: "#FFEDD5",
+  nutriE: "#991B1B",
+  nutriELight: "#FEE2E2",
 };

@@ -1,4 +1,4 @@
-type ProductResult = {
+export type ProductResult = {
   code: string;
   status: number;
   status_verbose: string;
@@ -17,7 +17,7 @@ type ProductResult = {
       salt: "low" | "moderate" | "high" | null;
     } | null;
     ingredients_analysis_tags: string[] | null;
-    image_url: string | null;
+    // image_url: string | null;
     serving_size: string | null;
     nutriments: {
       "energy-kcal_100g": number | null;
@@ -40,9 +40,11 @@ type ProductResult = {
   };
 };
 
-export default async function getData(query: string | string[]) {
+export const getData = async (query: string) => {
   const url = `https://world.openfoodfacts.net/api/v2/product/${query}?fields=product_name,brands,nutriscore_grade,nutriscore_score,nova_group,ingredients_text,additives_tags,allergens_tags,nutrient_levels,ingredients_analysis_tags,image_url,serving_size,nutriments.energy-kcal_100g,nutriments.proteins_100g,nutriments.carbohydrates_100g,nutriments.fat_100g,nutriments.saturated-fat_100g,nutriments.sugars_100g,nutriments.fiber_100g,nutriments.salt_100g,nutriments.sodium_100g,nutriments.energy-kcal_serving,nutriments.proteins_serving,nutriments.carbohydrates_serving,nutriments.fat_serving,nutriments.sugars_serving,nutriments.fiber_serving,nutriments.salt_serving,status_verbose`;
+
   let result;
+
   try {
     const response = await fetch(url, {
       method: "GET",
@@ -51,20 +53,8 @@ export default async function getData(query: string | string[]) {
       throw new Error(`Response status: ${response.status}`);
     }
     result = (await response.json()) as ProductResult;
-    processResult(result);
   } catch (error) {
     console.log(error);
   }
   return result;
-}
-
-const processResult = (data: ProductResult) => {
-  console.log(data.status_verbose);
-  console.log(data.product.brands);
-  console.log(data.product.product_name);
-  console.log(data.product.nova_group);
-  console.log(data.product.nutriscore_grade);
-  console.log(data.product.nutrient_levels);
-  console.log(data.product.serving_size);
-  console.log(data.product.nutriments);
 };
