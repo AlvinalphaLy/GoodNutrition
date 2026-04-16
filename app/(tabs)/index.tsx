@@ -2,7 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useProfile } from "../(tabs)/profileContext";
+import { useProfile } from "../context/profileContext";
 
 import { colors } from "../lib/colors";
 
@@ -56,7 +56,7 @@ type SummaryProps = {
 
 export default function Index() {
   const { profile } = useProfile();
-  console.log(profile);
+  // console.log(profile);
   return (
     <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
       <Summary profile={profile} />
