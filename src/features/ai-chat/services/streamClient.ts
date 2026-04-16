@@ -3,6 +3,11 @@ import { StreamChunk } from "../types/chat";
 export interface StreamOptions {
   url: string;
   message: string;
+  attachment?: {
+    name: string;
+    mimeType: string;
+    base64: string;
+  } | null;
   onChunk: (text: string) => void;
   onDone: () => void;
   onError: (err: Error) => void;
@@ -17,7 +22,8 @@ export interface StreamOptions {
  * as data arrives, giving us incremental chunks on both Android and iOS.
  */
 export function streamChatMessage(options: StreamOptions): void {
-  const { url, message, onChunk, onDone, onError, signal } = options;
+  const { url, message, attachment, onChunk, onDone, onError, signal } =
+    options;
 
   if (signal?.aborted) return;
 
@@ -74,7 +80,9 @@ export function streamChatMessage(options: StreamOptions): void {
           return;
         } else if (chunk.type === "error") {
           cleanup();
-          resolve(() => onError(new Error(chunk.error ?? "Stream error from server.")));
+          resolve(() =>
+            onError(new Error(chunk.error ?? "Stream error from server.")),
+          );
           return;
         }
       } catch {
@@ -87,7 +95,9 @@ export function streamChatMessage(options: StreamOptions): void {
       if (xhr.status === 0) {
         // network failure or aborted
         if (!signal?.aborted) {
-          resolve(() => onError(new Error("Network error — check your connection.")));
+          resolve(() =>
+            onError(new Error("Network error — check your connection.")),
+          );
         } else {
           resolve(onDone); // aborted intentionally — treat as clean stop
         }
@@ -109,5 +119,5 @@ export function streamChatMessage(options: StreamOptions): void {
     resolve(onDone);
   };
 
-  xhr.send(JSON.stringify({ message }));
+  xhr.send(JSON.stringify({ message, attachment }));
 }

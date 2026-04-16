@@ -1,8 +1,9 @@
 import { Agent } from "agents";
 import { buildSystemPrompt } from "../lib/prompt";
-import { checkSafety, checkOutputSafety } from "../lib/safety";
+import { checkOutputSafety, checkSafety } from "../lib/safety";
 import {
   AgentState,
+  AttachmentPayload,
   ChatRequest,
   DEFAULT_AGENT_STATE,
   Env,
@@ -59,10 +60,14 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
     const { pathname } = new URL(request.url);
     const { method } = request;
 
-    if (pathname.endsWith("/chat") && method === "POST")     return this.handleChat(request);
-    if (pathname.endsWith("/messages") && method === "GET")  return this.handleGetMessages();
-    if (pathname.endsWith("/profile") && method === "PATCH") return this.handleUpdateProfile(request);
-    if (pathname.endsWith("/clear") && method === "POST")    return this.handleClear();
+    if (pathname.endsWith("/chat") && method === "POST")
+      return this.handleChat(request);
+    if (pathname.endsWith("/messages") && method === "GET")
+      return this.handleGetMessages();
+    if (pathname.endsWith("/profile") && method === "PATCH")
+      return this.handleUpdateProfile(request);
+    if (pathname.endsWith("/clear") && method === "POST")
+      return this.handleClear();
 
     return jsonResp({ error: "Not found." }, 404);
   }
@@ -79,8 +84,24 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
     const userText = body.message?.trim();
     if (!userText) return jsonResp({ error: "'message' is required." }, 400);
 
+    if (body.attachment) {
+      console.log("[Agent] attachment received", {
+        name: body.attachment.name,
+        mimeType: body.attachment.mimeType,
+        base64Length: body.attachment.base64?.length ?? 0,
+      });
+    } else {
+      console.log("[Agent] no attachment in request body");
+    }
+
+    const attachmentContext = await this.buildAttachmentContext(
+      body.attachment,
+      userText,
+    );
+    const persistedText = attachmentContext?.persistedText ?? userText;
+
     // ── Safety pre-check ──────────────────────────────────────────────────────
-    const safety = checkSafety(userText);
+    const safety = checkSafety(persistedText);
     if (!safety.safe && safety.level === "block") {
       return sseText(safety.response);
     }
@@ -89,7 +110,7 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
     try {
       this.sql`
         INSERT INTO messages (id, role, content, timestamp)
-        VALUES (${newId()}, ${"user"}, ${userText}, ${new Date().toISOString()})
+        VALUES (${newId()}, ${"user"}, ${persistedText}, ${new Date().toISOString()})
       `;
     } catch (e) {
       console.error("[Agent] INSERT user msg failed:", e);
@@ -104,6 +125,18 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
         : "") + buildSystemPrompt(profile);
 
     const messages = history.map((m) => ({ role: m.role, content: m.content }));
+    if (attachmentContext) {
+      const lastIndex = findLastUserMessageIndex(messages);
+      const attachmentMessage = {
+        role: "user" as const,
+        content: attachmentContext.anthropicContent,
+      };
+      if (lastIndex >= 0) {
+        messages[lastIndex] = attachmentMessage;
+      } else {
+        messages.push(attachmentMessage);
+      }
+    }
 
     // ── Verify API key ────────────────────────────────────────────────────────
     const apiKey = this.env.ANTHROPIC_API_KEY;
@@ -126,7 +159,7 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
 
         const push = (chunk: StreamChunk) =>
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`)
+            encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`),
           );
 
         try {
@@ -150,7 +183,10 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
           if (!apiResp.ok) {
             const errBody = await apiResp.text();
             console.error(`[Agent] Anthropic ${apiResp.status}:`, errBody);
-            push({ type: "error", error: `Anthropic API error ${apiResp.status}. Check your API key.` });
+            push({
+              type: "error",
+              error: `Anthropic API error ${apiResp.status}. Check your API key.`,
+            });
             controller.close();
             return;
           }
@@ -187,7 +223,8 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
                   evt.type === "content_block_delta" &&
                   (evt.delta as Record<string, unknown>)?.type === "text_delta"
                 ) {
-                  const text = (evt.delta as Record<string, unknown>).text as string;
+                  const text = (evt.delta as Record<string, unknown>)
+                    .text as string;
                   if (text) {
                     fullText += text;
                     push({ type: "text_delta", content: text });
@@ -197,8 +234,12 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
                 // Anthropic error event in the stream
                 if (evt.type === "error") {
                   const errMsg =
-                    ((evt.error as Record<string, unknown>)?.message as string) ?? "Stream error";
-                  console.error("[Agent] Anthropic stream error event:", errMsg);
+                    ((evt.error as Record<string, unknown>)
+                      ?.message as string) ?? "Stream error";
+                  console.error(
+                    "[Agent] Anthropic stream error event:",
+                    errMsg,
+                  );
                   push({ type: "error", error: errMsg });
                   controller.close();
                   return;
@@ -234,7 +275,10 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[Agent] stream error:", msg);
-          push({ type: "error", error: "Something went wrong. Please try again." });
+          push({
+            type: "error",
+            error: "Something went wrong. Please try again.",
+          });
           controller.close();
         }
       },
@@ -337,10 +381,14 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
       for (const r of rows) {
         return JSON.parse(r["value"] as string) as UserProfile;
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
     try {
       return this.state.profile;
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
     return DEFAULT_AGENT_STATE.profile;
   }
 
@@ -350,6 +398,108 @@ export class NutritionChatAgent extends Agent<Env, AgentState> {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `;
   }
+
+  private async buildAttachmentContext(
+    attachment: AttachmentPayload | null | undefined,
+    userText: string,
+  ): Promise<{
+    persistedText: string;
+    anthropicContent: string | Record<string, unknown>[];
+  } | null> {
+    if (!attachment) return null;
+
+    const mimeType = normalizeMimeType(attachment.mimeType, attachment.name);
+    const question = userText.trim() || "Please analyze the attached file.";
+
+    if (mimeType === "application/pdf") {
+      const persistedText = `User question: ${question}\n\nAttached PDF: ${attachment.name}`;
+
+      return {
+        persistedText,
+        anthropicContent: [
+          {
+            type: "text",
+            text: `User question: ${question}`,
+          },
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: attachment.base64,
+            },
+            title: attachment.name,
+          },
+          {
+            type: "text",
+            text: "Use the attached PDF content directly when answering.",
+          },
+        ],
+      };
+    }
+
+    if (mimeType.startsWith("image/")) {
+      const label = `Attached image: ${attachment.name}`;
+      return {
+        persistedText: `User question: ${question}\n\n${label}`,
+        anthropicContent: [
+          {
+            type: "text",
+            text: `User question: ${question}`,
+          },
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mimeType,
+              data: attachment.base64,
+            },
+          },
+          {
+            type: "text",
+            text: "Inspect the attached image and answer based on what you can see.",
+          },
+        ],
+      };
+    }
+
+    return {
+      persistedText: `User question: ${question}\n\nAttached file: ${attachment.name}`,
+      anthropicContent: [
+        {
+          type: "text",
+          text: `User question: ${question}\n\nAttached file: ${attachment.name}. The file type ${mimeType} is not directly supported, so respond based on the user's text only.`,
+        },
+      ],
+    };
+  }
+}
+
+function findLastUserMessageIndex(
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string | Record<string, unknown>[];
+  }>,
+): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === "user") return i;
+  }
+  return -1;
+}
+
+function normalizeMimeType(
+  mimeType: string | undefined,
+  filename: string,
+): string {
+  if (mimeType && mimeType !== "application/octet-stream") return mimeType;
+
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".webp")) return "image/webp";
+
+  return "application/octet-stream";
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -376,6 +526,10 @@ function sseText(text: string): Response {
     },
   });
   return new Response(stream, {
-    headers: { ...CORS_HEADERS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+    headers: {
+      ...CORS_HEADERS,
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
   });
 }
