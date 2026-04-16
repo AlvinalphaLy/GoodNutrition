@@ -1,6 +1,6 @@
-import React from "react";
-import { Button, View, Text, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
+import React from "react";
+import { Button, StyleSheet, Text, TextInput, View } from "react-native";
 import { colors } from "../lib/colors";
 
 const Separator = () => <View style={styles.separator} />;

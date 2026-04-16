@@ -1,7 +1,8 @@
-import React from "react";
-import { Pressable, Text, ScrollView, View, StyleSheet } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link } from "expo-router";
+import React from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useProfile } from "../context/profileContext";
 
 import { colors } from "../lib/colors";
 
@@ -40,27 +41,44 @@ type LogButtonProps = {
   path: string;
 };
 
+type ProfileData = {
+  weight: number;
+  height: number;
+  calories: number;
+  protein: number;
+  carb: number;
+  fat: number;
+};
+
+type SummaryProps = {
+  profile: ProfileData;
+};
+
 export default function Index() {
+  const { profile } = useProfile();
+  // console.log(profile);
   return (
-    <ScrollView contentContainerStyle={styles.scrollContent}>
-      <Summary />
+    <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
+      <Summary profile={profile} />
       <LogMeal />
       <Meals />
     </ScrollView>
   );
 }
 
-const Summary = () => (
+const Summary = ({ profile }: SummaryProps) => (
   <View>
     <Text style={styles.header}>Today&apos;s Summary</Text>
-    <View style={styles.subContainer}>
-      <View style={styles.summaryRow}>
-        <Calories current={1450} goal={2500} />
-        <Macros />
-        <Score rate={2} />
+    <View>
+      <View style={styles.subContainer}>
+        <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
+          <Calories current={1500} goal={profile.calories} />
+          <Macros profile={profile} />
+          <Score rate={2} />
+        </View>
+        <Separator />
+        <HarmfulIngredientsSummary count={2} />
       </View>
-      <Separator />
-      <HarmfulIngredientsSummary count={2} />
     </View>
   </View>
 );
@@ -89,13 +107,13 @@ const Calories = ({ current, goal }: CaloriesProps) => (
   </View>
 );
 
-const Macros = () => (
+const Macros = ({ profile }: SummaryProps) => (
   <View>
     <Text style={styles.subHeader}>MACROS</Text>
     <View style={styles.macrosContainer}>
-      <MacroNutrient nutrient="Protein" current={120} goal={160} />
-      <MacroNutrient nutrient="Carbs" current={150} goal={200} />
-      <MacroNutrient nutrient="Fats" current={44} goal={77} />
+      <MacroNutrient nutrient="Protein" current={120} goal={profile.protein} />
+      <MacroNutrient nutrient="Carbs" current={150} goal={profile.carb} />
+      <MacroNutrient nutrient="Fats" current={44} goal={profile.fat} />
     </View>
   </View>
 );
