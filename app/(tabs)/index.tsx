@@ -51,16 +51,15 @@ type ProfileData = {
 };
 
 type SummaryProps = {
-  profile: ProfileData; 
+  profile: ProfileData;
 };
 
 export default function Index() {
   const { profile } = useProfile();
   console.log(profile);
   return (
-    
     <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
-      <Summary profile={ profile }/>
+      <Summary profile={profile} />
       <LogMeal />
       <Meals />
     </ScrollView>
@@ -73,15 +72,13 @@ const Summary = ({ profile }: SummaryProps) => (
     <View>
       <View style={styles.subContainer}>
         <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
-          <Calories current={1500} goal={ profile.calories } />
-          <Macros profile={ profile }/>
+          <Calories current={1500} goal={profile.calories} />
+          <Macros profile={profile} />
           <Score rate={2} />
         </View>
         <Separator />
         <HarmfulIngredientsSummary count={2} />
       </View>
-      <Separator />
-      <HarmfulIngredientsSummary count={2} />
     </View>
   </View>
 );
