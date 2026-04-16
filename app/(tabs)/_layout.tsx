@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Tabs } from "expo-router";
-import { ProfileProvider } from "../(tabs)/profileContext";
+import { ProfileProvider } from "../context/profileContext";
 
 import { colors } from "../lib/colors";
 
