@@ -1,6 +1,6 @@
-import { Tabs } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { Tabs } from "expo-router";
 
 import { colors } from "../lib/colors";
 
@@ -58,6 +58,22 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "person" : "person-outline"}
+              color={color}
+              size={24}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ai-chat-tab"
+        options={{
+          title: "AI",
+          headerShown: false,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={
+                focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"
+              }
               color={color}
               size={24}
             />
