@@ -1,5 +1,5 @@
 import React from "react";
-import { Button, View, Text, StyleSheet, TextInput } from "react-native";
+import { Pressable, View, Text, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
 
 import { colors } from "../lib/colors";
@@ -9,8 +9,6 @@ const Separator = () => <View style={styles.separator} />;
 export default function Index() {
   return (
     <View style={[styles.center, { flex: 1 }]}>
-      <Text style={styles.logo}>[ INSERT LOGO ]</Text>
-
       <Text style={styles.h1}>Welcome Back</Text>
       <Text style={[styles.subText, { marginBottom: 10 }]}>
         Enter your email and password
@@ -24,7 +22,9 @@ export default function Index() {
       </View>
 
       <View style={{ width: 350, margin: 20 }}>
-        <Button title="Log in" color={colors.primary} />
+        <Pressable style={styles.btn}>
+          <Text style={styles.btnText}>Log in</Text>
+        </Pressable>
       </View>
       <Separator />
 
@@ -39,6 +39,7 @@ export default function Index() {
     </View>
   );
 }
+
 const TextFields = () => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -77,7 +78,21 @@ const styles = StyleSheet.create({
     width: 350,
     margin: 12,
     borderWidth: 1,
+    borderColor: colors.textMedium,
+    borderRadius: 8,
     padding: 10,
+  },
+  btn: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  btnText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: "500",
   },
   separator: {
     borderBottomColor: colors.textMedium,

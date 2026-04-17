@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import React from "react";
-import { Button, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { colors } from "../lib/colors";
 
 const Separator = () => <View style={styles.separator} />;
@@ -15,7 +15,9 @@ export default function Index() {
       <TextFields />
 
       <View style={{ width: 350, margin: 20 }}>
-        <Button title="Sign up" color={colors.primary} />
+        <Pressable style={styles.btn}>
+          <Text style={styles.btnText}>Sign up</Text>
+        </Pressable>
       </View>
       <Separator />
 
@@ -83,6 +85,8 @@ const styles = StyleSheet.create({
     width: 350,
     margin: 12,
     borderWidth: 1,
+    borderColor: colors.textMedium,
+    borderRadius: 8,
     padding: 10,
   },
   separator: {
@@ -91,11 +95,23 @@ const styles = StyleSheet.create({
     width: "80%",
   },
   link: {
-    color: colors.primary,
+    color: colors.info,
     textDecorationLine: "underline",
     fontWeight: "500",
   },
   subText: {
     color: colors.textMedium,
+  },
+  btn: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  btnText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: "500",
   },
 });

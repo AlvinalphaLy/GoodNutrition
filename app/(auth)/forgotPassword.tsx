@@ -1,5 +1,5 @@
 import React from "react";
-import { Button, View, Text, StyleSheet, TextInput } from "react-native";
+import { Pressable, View, Text, StyleSheet, TextInput } from "react-native";
 import { colors } from "../lib/colors";
 
 export default function Index() {
@@ -12,7 +12,9 @@ export default function Index() {
       <TextFields />
 
       <View style={{ width: 350, margin: 10 }}>
-        <Button title="Reset Password" color={colors.primary} />
+        <Pressable style={styles.btn}>
+          <Text style={styles.btnText}>Sign up</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -47,8 +49,11 @@ const styles = StyleSheet.create({
     width: 350,
     margin: 12,
     borderWidth: 1,
+    borderColor: colors.textMedium,
+    borderRadius: 8,
     padding: 10,
   },
+
   link: {
     color: colors.info,
     textDecorationLine: "underline",
@@ -56,5 +61,17 @@ const styles = StyleSheet.create({
   },
   subText: {
     color: colors.textMedium,
+  },
+  btn: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  btnText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: "500",
   },
 });
