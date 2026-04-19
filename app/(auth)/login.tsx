@@ -7,7 +7,7 @@ import {
   StyleSheet,
   TextInput,
 } from "react-native";
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 
 import { supabase } from "../lib/supabase";
 import { colors } from "../lib/colors";
@@ -31,8 +31,13 @@ export default function Index() {
       password: password,
     });
 
-    if (error) Alert.alert(error.message);
+    if (error) {
+      Alert.alert(error.message);
+      return;
+    }
+
     setLoading(false);
+    router.replace("../(tabs)");
   }
 
   return (

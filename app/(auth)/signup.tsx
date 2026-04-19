@@ -39,17 +39,22 @@ export default function Index() {
     setLoading(true);
 
     const {
-      data: { session }, //wtf is this?
+      data: { session },
       error,
     } = await supabase.auth.signUp({
       email: email,
       password: password,
     });
 
-    if (error) Alert.alert(error.message);
+    if (error) {
+      Alert.alert(error.message);
+      return;
+    }
     if (!session)
       Alert.alert("Please check your inbox for email verification!");
+
     setLoading(false);
+    router.replace("/(auth)/login");
   }
 
   return (
