@@ -31,12 +31,11 @@ export default function Index() {
       password: password,
     });
 
+    setLoading(false);
     if (error) {
       Alert.alert(error.message);
       return;
     }
-
-    setLoading(false);
     router.replace("../(tabs)");
   }
 
