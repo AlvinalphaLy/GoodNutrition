@@ -1,26 +1,83 @@
-import { Link } from "expo-router";
-import React from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Link, router } from "expo-router";
+import { useState } from "react";
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+import { supabase } from "../lib/supabase";
 import { colors } from "../lib/colors";
 
-const Separator = () => <View style={styles.separator} />;
+type TextFieldsProps = {
+  fullName: string;
+  setFullName: (text: string) => void;
+  email: string;
+  setEmail: (text: string) => void;
+  password: string;
+  setPassword: (text: string) => void;
+  confirmPassword: string;
+  setConfirmPassword: (text: string) => void;
+};
 
 export default function Index() {
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function signUpWithEmail() {
+    if (password !== confirmPassword) {
+      Alert.alert("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+
+    const {
+      data: { session }, //wtf is this?
+      error,
+    } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+    });
+
+    if (error) Alert.alert(error.message);
+    if (!session)
+      Alert.alert("Please check your inbox for email verification!");
+    setLoading(false);
+  }
+
   return (
     <View style={[styles.center, { flex: 1 }]}>
       <Text style={styles.h1}>Sign up</Text>
       <Text style={[styles.subText, { marginBottom: 10 }]}>
         Sign up to get started
       </Text>
-      <TextFields />
-
+      <TextFields
+        fullName={fullName}
+        email={email}
+        password={password}
+        confirmPassword={confirmPassword}
+        setFullName={setFullName}
+        setEmail={setEmail}
+        setPassword={setPassword}
+        setConfirmPassword={setConfirmPassword}
+      />
       <View style={{ width: 350, margin: 20 }}>
-        <Pressable style={styles.btn}>
+        <Pressable
+          style={[styles.btn, loading && styles.buttonDisabled]}
+          onPress={() => signUpWithEmail()}
+          disabled={loading}
+        >
           <Text style={styles.btnText}>Sign up</Text>
         </Pressable>
       </View>
       <Separator />
-
       <View style={{ margin: 20 }}>
         <Text style={styles.subText}>
           Already have an account?{" "}
@@ -32,16 +89,22 @@ export default function Index() {
     </View>
   );
 }
-const TextFields = () => {
-  const [fullName, setFullname] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
 
+const TextFields = ({
+  fullName,
+  email,
+  password,
+  confirmPassword,
+  setFullName,
+  setEmail,
+  setPassword,
+  setConfirmPassword,
+}: TextFieldsProps) => {
   return (
     <View>
       <TextInput
         value={fullName}
-        onChangeText={setFullname}
+        onChangeText={setFullName}
         style={styles.input}
         placeholder="Full Name"
         autoCorrect={false}
@@ -52,6 +115,7 @@ const TextFields = () => {
         style={styles.input}
         placeholder="Email"
         autoCorrect={false}
+        autoCapitalize="none"
       ></TextInput>
       <TextInput
         value={password}
@@ -59,17 +123,21 @@ const TextFields = () => {
         style={styles.input}
         placeholder="Password"
         secureTextEntry={true}
+        autoCapitalize="none"
       ></TextInput>
       <TextInput
-        value={password}
-        onChangeText={setPassword}
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
         style={styles.input}
         placeholder="Confirm Password"
         secureTextEntry={true}
+        autoCapitalize="none"
       ></TextInput>
     </View>
   );
 };
+
+const Separator = () => <View style={styles.separator} />;
 
 const styles = StyleSheet.create({
   center: {
@@ -113,5 +181,8 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 14,
     fontWeight: "500",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

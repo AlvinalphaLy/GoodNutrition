@@ -1,33 +1,67 @@
-import React from "react";
-import { Pressable, View, Text, StyleSheet, TextInput } from "react-native";
+import { useState } from "react";
+import {
+  Pressable,
+  View,
+  Alert,
+  Text,
+  StyleSheet,
+  TextInput,
+} from "react-native";
 import { Link } from "expo-router";
 
+import { supabase } from "../lib/supabase";
 import { colors } from "../lib/colors";
 
-const Separator = () => <View style={styles.separator} />;
+type TextFieldsProps = {
+  email: string;
+  setEmail: (text: string) => void;
+  password: string;
+  setPassword: (text: string) => void;
+};
 
 export default function Index() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function logInWithEmail() {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+
+    if (error) Alert.alert(error.message);
+    setLoading(false);
+  }
+
   return (
     <View style={[styles.center, { flex: 1 }]}>
       <Text style={styles.h1}>Welcome Back</Text>
       <Text style={[styles.subText, { marginBottom: 10 }]}>
         Enter your email and password
       </Text>
-      <TextFields />
-
+      <TextFields
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+      />
       <View style={{ alignItems: "flex-end", width: 350, marginTop: 5 }}>
         <Link href="../(auth)/forgotPassword" style={styles.link}>
           Forgot password
         </Link>
       </View>
-
       <View style={{ width: 350, margin: 20 }}>
-        <Pressable style={styles.btn}>
+        <Pressable
+          style={[styles.btn, loading && styles.buttonDisabled]}
+          onPress={() => logInWithEmail()}
+          disabled={loading}
+        >
           <Text style={styles.btnText}>Log in</Text>
         </Pressable>
       </View>
       <Separator />
-
       <View style={[{ margin: 20 }]}>
         <Text style={styles.subText}>
           Don’t have an account?{" "}
@@ -40,29 +74,35 @@ export default function Index() {
   );
 }
 
-const TextFields = () => {
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-
+const TextFields = ({
+  email,
+  setEmail,
+  password,
+  setPassword,
+}: TextFieldsProps) => {
   return (
     <View>
       <TextInput
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(text) => setEmail(text)}
         style={styles.input}
         placeholder="Email"
         autoCorrect={false}
+        autoCapitalize="none"
       ></TextInput>
       <TextInput
         value={password}
-        onChangeText={setPassword}
+        onChangeText={(text) => setPassword(text)}
         style={styles.input}
         placeholder="Password"
         secureTextEntry={true}
+        autoCapitalize="none"
       ></TextInput>
     </View>
   );
 };
+
+const Separator = () => <View style={styles.separator} />;
 
 const styles = StyleSheet.create({
   center: {
@@ -109,5 +149,8 @@ const styles = StyleSheet.create({
   },
   subText: {
     color: colors.textMedium,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });
