@@ -2,6 +2,7 @@
 // TODO: Activity level
 // TODO: Height in ft
 // TODO: Swtich macro goals to percentages
+// TODO: Add sex
 
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
