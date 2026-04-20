@@ -126,7 +126,7 @@ const MacroNutrient = ({ nutrient, current, goal }: MacroProps) => (
 
 const LogMeal = () => (
   <View>
-    <Text style={styles.header}>Log Meal</Text>
+    <Text style={styles.header}>Quick actions</Text>
     <View style={[styles.subContainer, styles.logMealRow]}>
       <LogButton name="barcode" path="barcode-scan" />
       <LogButton name="search" path="" />

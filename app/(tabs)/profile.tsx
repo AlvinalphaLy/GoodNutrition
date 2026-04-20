@@ -1,7 +1,8 @@
 // TODO: Health conditions
 // TODO: Activity level
+// TODO: Weight goal
+// TODO: Switch macro goals to percentages
 // TODO: Height in ft
-// TODO: Swtich macro goals to percentages
 // TODO: Add sex
 
 import * as ImagePicker from "expo-image-picker";

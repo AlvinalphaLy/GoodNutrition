@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderRadius: 12,
     width: "80%",
-    height: "20%",
+    height: "18%",
     alignSelf: "center",
   },
   flashlight: {
