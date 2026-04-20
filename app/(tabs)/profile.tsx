@@ -1,3 +1,8 @@
+// TODO: Health conditions
+// TODO: Activity level
+// TODO: Height in ft
+// TODO: Swtich macro goals to percentages
+
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
@@ -66,17 +71,6 @@ export default function Profile() {
             </View>
 
             <View style={styles.card}>
-              <View style={styles.row}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  value={profile.email}
-                  onChangeText={(text) =>
-                    setProfile((prev) => ({ ...prev, email: text }))
-                  }
-                  style={styles.input}
-                />
-              </View>
-
               <View style={styles.row}>
                 <Text style={styles.label}>Age</Text>
                 <TextInput

@@ -2,7 +2,6 @@ import React, { createContext, ReactNode, useContext, useState } from "react";
 
 export type ProfileData = {
   name: string;
-  email: string;
   age: number;
   weight: number;
   height: number;
@@ -23,7 +22,6 @@ const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileData>({
     name: "John Doe",
-    email: "john@email.com",
     age: 0,
     weight: 0,
     height: 0,

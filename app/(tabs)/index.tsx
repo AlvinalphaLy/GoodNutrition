@@ -159,11 +159,10 @@ const meals: MealCardProps[] = [
     tags: [{ label: "Moderate sodium", variant: "warning" }],
   },
 ];
-
 const Meals = () => (
   <View>
     <Text style={styles.header}>Today&apos;s Meals</Text>
-    <View style={styles.mealsWrapper}>
+    <View>
       {meals.length === 0 ? (
         <Text style={styles.emptyState}>No meals logged yet today.</Text>
       ) : (
@@ -226,10 +225,6 @@ const Tag = ({ label, variant }: TagProps) => (
 const Separator = () => <View style={styles.separator} />;
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    gap: 12,
-    padding: 10,
-  },
   header: {
     fontSize: 18,
     fontWeight: "bold",
@@ -239,7 +234,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   subContainer: {
-    marginVertical: 8,
+    marginVertical: 4,
     padding: 12,
     borderRadius: 12,
     backgroundColor: colors.cardBg,
@@ -248,10 +243,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
     elevation: 5,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
   },
   harmfulRow: {
     flexDirection: "row",
@@ -265,7 +256,7 @@ const styles = StyleSheet.create({
   },
   caloriesNumber: {
     fontWeight: "bold",
-    fontSize: 28,
+    fontSize: 26,
   },
   macrosContainer: {
     gap: 3,
@@ -290,12 +281,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     flexDirection: "row",
   },
-  mealsWrapper: {
-    marginVertical: 10,
-  },
   mealTypeLabel: {
+    marginTop: 8,
     color: colors.textLight,
-    fontSize: 14,
   },
   mealTopRow: {
     flexDirection: "row",
