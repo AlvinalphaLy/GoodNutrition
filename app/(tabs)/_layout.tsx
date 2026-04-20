@@ -31,6 +31,7 @@ export default function TabLayout() {
           name="meals"
           options={{
             title: "Meals",
+            headerShown: false,
             tabBarIcon: ({ color, focused }) => (
               <MaterialCommunityIcons
                 name={focused ? "food-apple" : "food-apple-outline"}
