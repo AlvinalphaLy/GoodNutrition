@@ -48,6 +48,13 @@ export interface StoredMessage {
 // ─── API ──────────────────────────────────────────────────────────────────────
 export interface ChatRequest {
   message: string;
+  attachment?: AttachmentPayload | null;
+}
+
+export interface AttachmentPayload {
+  name: string;
+  mimeType: string;
+  base64: string;
 }
 
 export interface ProfileUpdateRequest {

@@ -1,13 +1,18 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  chatStreamUrl,
+  getSessionMessages,
+  updateSessionProfile,
+} from "../services/chatApi";
+import { streamChatMessage } from "../services/streamClient";
+import {
+  ChatAttachment,
   ChatMessage,
   DEFAULT_PROFILE,
   UseAiChatOptions,
   UseAiChatReturn,
   UserProfile,
 } from "../types/chat";
-import { chatStreamUrl, getSessionMessages, updateSessionProfile } from "../services/chatApi";
-import { streamChatMessage } from "../services/streamClient";
 import {
   appendChunk,
   createAssistantPlaceholder,
@@ -36,10 +41,16 @@ export function useAiChat({
   const streamingIdRef = useRef<string | null>(null);
 
   // ── Sync profile to backend whenever it changes ───────────────────────────
-  const profileRef = useRef<Partial<UserProfile> & { userId: string } | undefined>(profile);
+  const profileRef = useRef<
+    (Partial<UserProfile> & { userId: string }) | undefined
+  >(profile);
   if (profile && profile !== profileRef.current) {
     profileRef.current = profile;
-    const fullProfile: UserProfile = { ...DEFAULT_PROFILE, ...profile, userId: profile.userId };
+    const fullProfile: UserProfile = {
+      ...DEFAULT_PROFILE,
+      ...profile,
+      userId: profile.userId,
+    };
     updateSessionProfile(sessionId, fullProfile).catch(() => {
       // Non-fatal — the backend stores profile on first chat too
     });
@@ -47,14 +58,18 @@ export function useAiChat({
 
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = useCallback(
-    (text: string) => {
+    (text: string, attachment?: ChatAttachment | null) => {
       const trimmed = text.trim();
-      if (!trimmed || isStreaming) return;
+      if ((!trimmed && !attachment) || isStreaming) return;
+
+      const outgoingText =
+        trimmed ||
+        `Please analyze the attached file: ${attachment?.name ?? "attachment"}.`;
 
       setError(null);
       setIsStreaming(true);
 
-      const userMsg = createUserMessage(trimmed);
+      const userMsg = createUserMessage(outgoingText);
       const placeholder = createAssistantPlaceholder();
       streamingIdRef.current = placeholder.id;
 
@@ -65,13 +80,14 @@ export function useAiChat({
 
       streamChatMessage({
         url: chatStreamUrl(sessionId),
-        message: trimmed,
+        message: outgoingText,
+        attachment,
         signal: controller.signal,
         onChunk: (chunk) => {
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === streamingIdRef.current ? appendChunk(m, chunk) : m
-            )
+              m.id === streamingIdRef.current ? appendChunk(m, chunk) : m,
+            ),
           );
         },
         onDone: () => {
@@ -80,7 +96,7 @@ export function useAiChat({
           const id = streamingIdRef.current;
           streamingIdRef.current = null;
           setMessages((prev) =>
-            prev.map((m) => (m.id === id ? finalizeMessage(m) : m))
+            prev.map((m) => (m.id === id ? finalizeMessage(m) : m)),
           );
           setIsStreaming(false);
         },
@@ -94,7 +110,7 @@ export function useAiChat({
         },
       });
     },
-    [isStreaming, sessionId]
+    [isStreaming, sessionId],
   );
 
   // ── Load history from backend ─────────────────────────────────────────────
@@ -115,7 +131,7 @@ export function useAiChat({
     const id = streamingIdRef.current;
     streamingIdRef.current = null;
     setMessages((prev) =>
-      prev.map((m) => (m.id === id ? finalizeMessage(m) : m))
+      prev.map((m) => (m.id === id ? finalizeMessage(m) : m)),
     );
     setIsStreaming(false);
   }, []);
