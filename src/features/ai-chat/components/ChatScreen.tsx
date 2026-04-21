@@ -85,8 +85,7 @@ export function ChatScreen({ profile, sessionId, onBack }: Props) {
       {/* ── Messages + Input ────────────────────────────────────────────── */}
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ChatMessageList
           messages={messages}
@@ -182,12 +181,9 @@ const styles = StyleSheet.create({
     color: "#991b1b",
   },
   inputWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     paddingHorizontal: 12,
     paddingBottom: 16,
+    paddingTop: 8,
     backgroundColor: palette.background,
     borderTopWidth: 1,
     borderTopColor: palette.outline,
