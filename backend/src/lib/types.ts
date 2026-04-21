@@ -64,7 +64,9 @@ export interface ProfileUpdateRequest {
 // ─── Environment bindings (wrangler.jsonc → TypeScript) ──────────────────────
 export interface Env {
   NUTRITION_CHAT_AGENT: DurableObjectNamespace;
+  AI: Ai;
   ANTHROPIC_API_KEY: string;
+  OPENAI_API_KEY: string;
   ENVIRONMENT?: "development" | "production";
   ALLOWED_ORIGIN?: string; // defaults to "*"
 }

@@ -27,6 +27,11 @@
     }
   ],
 
+  // ── Cloudflare Workers AI (Whisper STT) ─────────────────────────────────────
+  "ai": {
+    "binding": "AI"
+  },
+
   // ── Secrets (set via `wrangler secret put ANTHROPIC_API_KEY`) ───────────────
   // Do NOT commit real keys — list them here for documentation only.
   // "vars": {

@@ -11,6 +11,7 @@ export default function MealsLayout() {
         <Stack.Screen name="log-meal/method" options={{ title: "Choose Logging Method" }} />
         <Stack.Screen name="log-meal/add-items" options={{ title: "Add Food Items" }} />
         <Stack.Screen name="log-meal/review" options={{ title: "Review Meal" }} />
+        <Stack.Screen name="log-meal/voice-confirm" options={{ headerShown: false }} />
         <Stack.Screen name="recipes/index" options={{ title: "Recipes" }} />
         <Stack.Screen name="recipes/view" options={{ title: "View Existing Recipes" }} />
         <Stack.Screen name="recipes/create" options={{ title: "Create New Recipe" }} />

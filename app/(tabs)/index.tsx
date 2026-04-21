@@ -1,10 +1,13 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Link } from "expo-router";
-import React from "react";
+import { Link, useRouter, type Href } from "expo-router";
+import React, { useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useProfile } from "../context/profileContext";
 
 import { colors } from "../lib/colors";
+import { VoiceRecorder } from "../../src/features/voice-log/components/VoiceRecorder";
+import { useVoiceLog } from "../../src/features/voice-log/hooks/useVoiceLog";
+import { pendingVoiceStore } from "../../src/features/voice-log/store/pendingVoice";
 
 const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
   success: { bg: colors.successLight, text: colors.successText },
@@ -38,7 +41,8 @@ type MacroProps = {
 
 type LogButtonProps = {
   name: keyof typeof Ionicons.glyphMap;
-  path: string;
+  path?: string;
+  onPress?: () => void;
 };
 
 type ProfileData = {
@@ -56,12 +60,23 @@ type SummaryProps = {
 
 export default function Index() {
   const { profile } = useProfile();
-  // console.log(profile);
+  const router = useRouter();
+  const { state, startVoice, stopVoice, reset } = useVoiceLog();
+
+  useEffect(() => {
+    if (state.status === "preview") {
+      pendingVoiceStore.set(state.result);
+      reset();
+      router.push("/meals/log-meal/voice-confirm" as Href);
+    }
+  }, [state]);
+
   return (
     <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
       <Summary profile={profile} />
-      <LogMeal />
+      <LogMeal onMicPress={startVoice} />
       <Meals />
+      <VoiceRecorder state={state} onStop={stopVoice} onDismiss={reset} />
     </ScrollView>
   );
 }
@@ -124,23 +139,32 @@ const MacroNutrient = ({ nutrient, current, goal }: MacroProps) => (
   </Text>
 );
 
-const LogMeal = () => (
+const LogMeal = ({ onMicPress }: { onMicPress: () => void }) => (
   <View>
     <Text style={styles.header}>Quick actions</Text>
     <View style={[styles.subContainer, styles.logMealRow]}>
       <LogButton name="barcode" path="barcode-scan" />
       <LogButton name="search" path="" />
-      <LogButton name="mic" path="" />
+      <LogButton name="mic" onPress={onMicPress} />
       <LogButton name="chatbubble-ellipses" path="ai-chat" />
     </View>
   </View>
 );
 
-const LogButton = ({ name, path }: LogButtonProps) => (
-  <Link href={`../${path}`}>
-    <Ionicons name={name} size={28} color={colors.textDark} />
-  </Link>
-);
+const LogButton = ({ name, path, onPress }: LogButtonProps) => {
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress}>
+        <Ionicons name={name} size={28} color={colors.textDark} />
+      </Pressable>
+    );
+  }
+  return (
+    <Link href={`../${path ?? ""}`}>
+      <Ionicons name={name} size={28} color={colors.textDark} />
+    </Link>
+  );
+};
 
 // Dummy Data
 const meals: MealCardProps[] = [
