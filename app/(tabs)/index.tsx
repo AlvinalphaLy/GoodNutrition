@@ -131,7 +131,7 @@ const LogMeal = () => (
       <LogButton name="barcode" path="barcode-scan" />
       <LogButton name="search" path="" />
       <LogButton name="mic" path="" />
-      <LogButton name="chatbubble-ellipses" path="" />
+      <LogButton name="chatbubble-ellipses" path="ai-chat" />
     </View>
   </View>
 );
