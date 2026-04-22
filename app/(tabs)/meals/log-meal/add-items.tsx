@@ -17,8 +17,10 @@ import { fieldPlaceholderColor, formatQuantityLabel } from "../display";
 import { commonUnits, type PresetFoodItem } from "../meals-data";
 import { useMeals, type MealDraftItem } from "../meals-context";
 import {
+  adaptImportedNutrition,
   buildOpenFoodFactsNutrition,
   getOpenFoodFactsDefaultUnit,
+  parseAmount,
 } from "../nutrition";
 import {
   getAmountError,
@@ -30,6 +32,7 @@ import {
   searchOpenFoodFacts,
   type OpenFoodFactsSearchProduct,
 } from "../../../../src/lib/openFoodFacts";
+import { lookupNutrition } from "../../../../src/features/voice-log/services/nutritionLookup";
 
 type MealMatch =
   | { id: string; name: string; kind: "recipe"; subtitle: string }
@@ -112,6 +115,7 @@ export default function AddFoodItemsScreen() {
   const [foodSearchLoading, setFoodSearchLoading] = useState(false);
   const [foodSearchStatus, setFoodSearchStatus] = useState<string | null>(null);
   const [hasSearchedFoods, setHasSearchedFoods] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
 
   const mealMatches = useMemo<MealMatch[]>(() => {
     const normalized = mealSearch.trim().toLowerCase();
@@ -317,6 +321,7 @@ export default function AddFoodItemsScreen() {
     setFoodSearchLoading(false);
     setFoodSearchStatus(null);
     setHasSearchedFoods(false);
+    setLookingUp(false);
   };
 
   const cancelAddedItemEdit = () => {
@@ -997,9 +1002,9 @@ export default function AddFoodItemsScreen() {
             </View>
 
             <Pressable
-              style={[styles.primaryButton, !canAddItem && styles.buttonDisabled]}
-              disabled={!canAddItem}
-              onPress={() => {
+              style={[styles.primaryButton, (!canAddItem || lookingUp) && styles.buttonDisabled]}
+              disabled={!canAddItem || lookingUp}
+              onPress={async () => {
                 setAttemptedAdd(true);
                 if (!canAddItem || !selectedFood) return;
 
@@ -1008,7 +1013,7 @@ export default function AddFoodItemsScreen() {
                 let brand = selectedFood.brand;
                 let sourceType: MealDraftItem["sourceType"] = "manual";
                 let offProductCode: string | null | undefined;
-                let nutrition = null;
+                let nutrition: MealDraftItem["nutrition"] | null = null;
 
                 if (selectedFood.source === "custom") {
                   const savedCustom = saveCustomFood(normalizedName, normalizedUnit || "serving");
@@ -1024,6 +1029,22 @@ export default function AddFoodItemsScreen() {
                   sourceType = "off";
                   offProductCode = selectedFood.offProduct.code;
                   brand = selectedFood.offProduct.brands ?? undefined;
+                } else {
+                  setLookingUp(true);
+                  try {
+                    const lookedUp = await lookupNutrition(
+                      normalizedName,
+                      parseAmount(quantity),
+                      normalizedUnit || null
+                    );
+                    const adapted = adaptImportedNutrition(lookedUp);
+                    nutrition = adapted;
+                    if (!brand && adapted?.brand) {
+                      brand = adapted.brand ?? undefined;
+                    }
+                  } finally {
+                    setLookingUp(false);
+                  }
                 }
 
                 if (customMealSelected) {
@@ -1059,8 +1080,8 @@ export default function AddFoodItemsScreen() {
                 resetFoodEntry();
               }}
             >
-              <Text style={[styles.primaryButtonText, !canAddItem && styles.buttonTextDisabled]}>
-                Add Food Item
+              <Text style={[styles.primaryButtonText, (!canAddItem || lookingUp) && styles.buttonTextDisabled]}>
+                {lookingUp ? "Looking up nutrition…" : "Add Food Item"}
               </Text>
             </Pressable>
           </>

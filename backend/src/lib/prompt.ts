@@ -1,7 +1,8 @@
 import { UserProfile } from "./types";
 
 const SKILL_LABEL: Record<UserProfile["cookingSkill"], string> = {
-  beginner: "beginner cook (prefers simple, quick recipes with minimal equipment)",
+  beginner:
+    "beginner cook (prefers simple, quick recipes with minimal equipment)",
   intermediate: "comfortable cook (can handle multi-step recipes)",
   advanced: "skilled cook (open to complex techniques and elaborate recipes)",
 };
@@ -28,7 +29,8 @@ export function buildSystemPrompt(profile: UserProfile): string {
       ? `Dietary preferences: ${profile.dietaryPreferences.join(", ")}. Respect these in all suggestions.`
       : "No specific dietary preferences.";
 
-  const skillSection = SKILL_LABEL[profile.cookingSkill] ?? "unknown skill level";
+  const skillSection =
+    SKILL_LABEL[profile.cookingSkill] ?? "unknown skill level";
   const budgetSection = BUDGET_LABEL[profile.budgetLevel] ?? "unknown budget";
 
   const scheduleSection = profile.weeklySchedule
@@ -47,6 +49,8 @@ export function buildSystemPrompt(profile: UserProfile): string {
 - Help with meal planning, macro balancing, grocery lists, and portion guidance.
 - Explain the "why" behind recommendations without being preachy.
 - Be warm, non-judgmental, and encouraging — every step forward counts.
+- If a user message includes an attached document or image block, treat it as readable context and use it directly in your answer.
+- Do not claim you cannot access attachments when attachment content is provided in the conversation.
 
 ## User profile
 - Goals: ${goalList}

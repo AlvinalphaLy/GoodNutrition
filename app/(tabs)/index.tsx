@@ -1,8 +1,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useRouter, type Href } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { VoiceRecorder } from "../../src/features/voice-log/components/VoiceRecorder";
+import { useVoiceLog } from "../../src/features/voice-log/hooks/useVoiceLog";
+import { pendingVoiceStore } from "../../src/features/voice-log/store/pendingVoice";
 import { useProfile } from "../context/profileContext";
 import { colors } from "../lib/colors";
 import { useMeals } from "./meals/meals-context";
@@ -48,6 +51,7 @@ export default function Index() {
   const router = useRouter();
   const { profile } = useProfile();
   const { loggedMeals } = useMeals();
+  const { state, startVoice, stopVoice, reset } = useVoiceLog();
 
   const todayKey = new Date().toDateString();
   const todaysMeals = useMemo(
@@ -89,6 +93,14 @@ export default function Index() {
     [profile.calories, profile.carb, profile.fat, profile.protein, todayNutrition]
   );
 
+  useEffect(() => {
+    if (state.status === "preview") {
+      pendingVoiceStore.set(state.result);
+      reset();
+      router.push("/meals/log-meal/voice-confirm" as Href);
+    }
+  }, [state, reset, router]);
+
   return (
     <ScrollView contentContainerStyle={{ gap: 20, padding: 20, paddingBottom: 40 }}>
       <Summary
@@ -111,11 +123,15 @@ export default function Index() {
             `/barcode-scan?returnTo=${encodeURIComponent("/meals/log-meal/review")}&finalReturnTo=${encodeURIComponent("/")}` as Href
           )
         }
+        onMicPress={() => {
+          void startVoice();
+        }}
       />
       <Meals
         meals={mealCards}
         onOpenMeal={(mealId) => router.push(`/meals/log-meal/review?loggedMealId=${mealId}` as Href)}
       />
+      <VoiceRecorder state={state} onStop={() => void stopVoice()} onDismiss={reset} />
     </ScrollView>
   );
 }
@@ -145,7 +161,9 @@ const Summary = ({
 
 const HarmfulIngredientsSummary = ({ count }: { count: number }) => (
   <View style={styles.harmfulRow}>
-    <Text style={styles.harmfulText}>{count} harmful ingredients detected</Text>
+    <Text style={styles.harmfulText}>
+      {count > 0 ? `${count} harmful ingredient${count === 1 ? "" : "s"} detected` : "No harmful ingredients detected"}
+    </Text>
     <Ionicons name="warning-outline" size={18} color={count > 0 ? colors.dangerText : colors.textMedium} />
   </View>
 );
@@ -185,13 +203,21 @@ const MacroNutrient = ({ nutrient, current, goal }: MacroProps) => (
   </Text>
 );
 
-const QuickActions = ({ onLogMeal, onBarcode }: { onLogMeal: () => void; onBarcode: () => void }) => (
+const QuickActions = ({
+  onLogMeal,
+  onBarcode,
+  onMicPress,
+}: {
+  onLogMeal: () => void;
+  onBarcode: () => void;
+  onMicPress: () => void;
+}) => (
   <View>
     <Text style={styles.header}>Quick actions</Text>
     <View style={[styles.subContainer, styles.logMealRow]}>
       <ActionButton label="Log meal" icon="restaurant-outline" onPress={onLogMeal} />
       <ActionButton label="Barcode" icon="barcode-outline" onPress={onBarcode} />
-      <ActionButton label="Search" icon="search-outline" disabled />
+      <ActionButton label="Voice" icon="mic-outline" onPress={onMicPress} />
       <ActionButton label="AI" icon="chatbubble-ellipses-outline" disabled />
     </View>
   </View>

@@ -65,6 +65,7 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="ai-chat-tab" options={{ href: null }} />
     </Tabs>
   );
 }

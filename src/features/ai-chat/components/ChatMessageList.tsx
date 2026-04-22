@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 18,
-    paddingBottom: 200, // space above the fixed input bar
+    paddingBottom: 16,
     gap: 14,
   },
   empty: {

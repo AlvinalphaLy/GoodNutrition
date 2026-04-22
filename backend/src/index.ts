@@ -17,6 +17,8 @@
  */
 
 import { Env } from "./lib/types";
+import { handleVoiceParse } from "./handlers/voiceParse";
+import { handleSpeechToText } from "./handlers/speechToText";
 
 export { NutritionChatAgent } from "./agents/NutritionChatAgent";
 
@@ -40,6 +42,15 @@ export default {
       return new Response(JSON.stringify({ ok: true, ts: Date.now() }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
+    }
+
+    // ── Voice STT + parse ─────────────────────────────────────────────────────
+    if (url.pathname === "/api/voice-stt" && request.method === "POST") {
+      return handleSpeechToText(request, env);
+    }
+
+    if (url.pathname === "/api/voice-parse" && request.method === "POST") {
+      return handleVoiceParse(request, env);
     }
 
     // ── Route to Agent ────────────────────────────────────────────────────────

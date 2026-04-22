@@ -7,6 +7,113 @@ import { formatQuantityLabel } from "../display";
 import { useMeals } from "../meals-context";
 import { buildScoreSummary, summarizeNutritionEntries } from "../nutrition";
 
+const NUTRISCORE_COLOR: Record<string, string> = {
+  a: "#038141",
+  b: "#85BB2F",
+  c: "#FECB02",
+  d: "#EE8100",
+  e: "#E63312",
+};
+
+const NOVA_COLOR: Record<number, string> = {
+  1: "#038141",
+  2: "#85BB2F",
+  3: "#EE8100",
+  4: "#E63312",
+};
+
+const NOVA_LABEL: Record<number, string> = {
+  1: "Unprocessed",
+  2: "Culinary ingredient",
+  3: "Processed",
+  4: "Ultra-processed",
+};
+
+function formatTag(tag: string): string {
+  return tag.replace(/^en:/, "").replace(/-/g, " ");
+}
+
+function IngredientReview({ items }: { items: ReturnType<typeof useMeals>["mealDraft"]["items"] }) {
+  const itemsWithData = items.filter(
+    (i) =>
+      i.nutrition?.nutriscore_grade ||
+      i.nutrition?.nova_group ||
+      i.nutrition?.allergens_tags?.length ||
+      i.nutrition?.additives_tags?.length ||
+      i.nutrition?.nutrient_levels
+  );
+
+  if (itemsWithData.length === 0) {
+    return <Text style={styles.cardText}>No ingredient data available yet.</Text>;
+  }
+
+  return (
+    <>
+      {itemsWithData.map((item) => {
+        const ns = item.nutrition?.nutriscore_grade?.toLowerCase();
+        const nsColor = ns ? NUTRISCORE_COLOR[ns] ?? "#9ca3af" : null;
+        const nova = item.nutrition?.nova_group;
+        const novaColor = nova ? NOVA_COLOR[nova] ?? "#9ca3af" : null;
+        const allergens = item.nutrition?.allergens_tags?.map(formatTag).filter(Boolean) ?? [];
+        const additives = item.nutrition?.additives_tags?.map(formatTag).filter(Boolean) ?? [];
+        const nl = item.nutrition?.nutrient_levels;
+        const highFlags = nl
+          ? (["fat", "saturated-fat", "sugars", "salt"] as const)
+              .filter((k) => nl[k] === "high")
+              .map((k) => k.replace("-", " "))
+          : [];
+
+        return (
+          <View key={item.id} style={styles.ingredientItem}>
+            <Text style={styles.ingredientName}>{item.name}</Text>
+
+            <View style={styles.badgeRow}>
+              {nsColor ? (
+                <View style={[styles.badge, { backgroundColor: nsColor }]}>
+                  <Text style={styles.badgeText}>
+                    Nutri-Score {item.nutrition?.nutriscore_grade?.toUpperCase()}
+                  </Text>
+                </View>
+              ) : null}
+              {nova && novaColor ? (
+                <View style={[styles.badge, { backgroundColor: novaColor }]}>
+                  <Text style={styles.badgeText}>
+                    NOVA {nova} · {NOVA_LABEL[nova]}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {allergens.length > 0 ? (
+              <View style={styles.flagRow}>
+                <Text style={styles.flagBullet}>⚠️</Text>
+                <Text style={[styles.flagText, { color: "#b45309" }]}>Allergens: {allergens.join(", ")}</Text>
+              </View>
+            ) : null}
+
+            {additives.length > 0 ? (
+              <View style={styles.flagRow}>
+                <Text style={styles.flagBullet}>🧪</Text>
+                <Text style={styles.flagText}>
+                  {additives.length} additive{additives.length > 1 ? "s" : ""}: {additives.slice(0, 4).join(", ")}
+                  {additives.length > 4 ? ` +${additives.length - 4} more` : ""}
+                </Text>
+              </View>
+            ) : null}
+
+            {highFlags.length > 0 ? (
+              <View style={styles.flagRow}>
+                <Text style={styles.flagBullet}>🔴</Text>
+                <Text style={[styles.flagText, { color: "#b91c1c" }]}>High in: {highFlags.join(", ")}</Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </>
+  );
+}
+
 export default function ReviewMealScreen() {
   const router = useRouter();
   const { profile } = useProfile();
@@ -81,8 +188,12 @@ export default function ReviewMealScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Eating Score</Text>
-        <Text style={styles.score}>{scoreSummary.score} / 100</Text>
-        <Text style={styles.cardText}>Approximate rating: {scoreSummary.rating}/5</Text>
+        <View style={styles.scoreRow}>
+          <Text style={styles.score}>{scoreSummary.score} / 100</Text>
+          <View style={styles.gradeBadge}>
+            <Text style={styles.gradeText}>{scoreSummary.rating}/5</Text>
+          </View>
+        </View>
         {scoreSummary.notes.map((note) => (
           <Text key={note} style={styles.cardText}>• {note}</Text>
         ))}
@@ -99,7 +210,7 @@ export default function ReviewMealScreen() {
               <Text style={styles.rowText}>{formatQuantityLabel(item.quantity, item.unit)}</Text>
               {item.nutrition ? (
                 <Text style={styles.rowMeta}>
-                  {Math.round(item.nutrition.calories)} kcal • {Math.round(item.nutrition.protein)}g protein • {Math.round(item.nutrition.carbs)}g carbs • {Math.round(item.nutrition.fat)}g fat
+                  {Math.round(item.nutrition.calories ?? 0)} kcal • {Math.round(item.nutrition.protein ?? 0)}g protein • {Math.round(item.nutrition.carbs ?? 0)}g carbs • {Math.round(item.nutrition.fat ?? 0)}g fat
                 </Text>
               ) : null}
               {item.entryKind === "meal" && item.nestedItems?.length ? (
@@ -118,16 +229,7 @@ export default function ReviewMealScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Ingredient Review</Text>
-        {mealNutrition.harmfulIngredientMatches.length === 0 ? (
-          <Text style={styles.cardText}>No harmful ingredients detected from the foods with ingredient data.</Text>
-        ) : (
-          mealNutrition.harmfulIngredientMatches.map((flag) => (
-            <View key={flag} style={styles.flagRow}>
-              <Text style={styles.flagBullet}>•</Text>
-              <Text style={styles.flagText}>{flag}</Text>
-            </View>
-          ))
-        )}
+        <IngredientReview items={mealItems} />
       </View>
 
       {isViewingSavedMeal && savedMeal ? (
@@ -222,11 +324,29 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginBottom: 8,
   },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
   score: {
     fontSize: 32,
     fontWeight: "800",
     color: "#22c55e",
-    marginBottom: 8,
+  },
+  gradeBadge: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#22c55e",
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  gradeText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#166534",
   },
   row: {
     paddingVertical: 10,
@@ -259,14 +379,41 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 2,
   },
+  ingredientItem: {
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+    gap: 6,
+  },
+  ingredientName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
+    textTransform: "capitalize",
+    marginBottom: 2,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
   flagRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     marginBottom: 8,
   },
   flagBullet: {
-    fontSize: 18,
-    color: "#22c55e",
+    fontSize: 16,
     marginRight: 8,
     lineHeight: 20,
   },
@@ -320,6 +467,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#bbf7d0",
   },
   buttonTextDisabled: {
-    color: "#6b7280",
+    color: "#166534",
   },
 });
