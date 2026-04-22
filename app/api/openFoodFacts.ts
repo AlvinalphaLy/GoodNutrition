@@ -45,31 +45,37 @@ type OFFSearchResponse = {
   count: number;
 };
 
-const OFF_SEARCH = "https://world.openfoodfacts.org/cgi/search.pl";
+const OFF_SEARCH_PRIMARY  = "https://world.openfoodfacts.org/cgi/search.pl";
+const OFF_SEARCH_FALLBACK = "https://world.openfoodfacts.org/api/v2/search";
 const OFF_FIELDS =
   "product_name,nova_group,nutriscore_grade,ingredients_text,additives_tags," +
-  "allergens_tags,nutrient_levels,serving_size,nutriments";
+  "allergens_tags,nutrient_levels,ingredients_analysis_tags,serving_size,nutriments";
 
-// "kitkat" → "kit kat", "cocacola" → "coca cola"
 function normalizeSearchTerm(name: string): string {
   return name
-    .replace(/([a-z])([A-Z])/g, "$1 $2")           // camelCase split
-    .replace(/([a-zA-Z])(\d)/g, "$1 $2")            // letters + digits
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([a-zA-Z])(\d)/g, "$1 $2")
     .replace(/(\d)([a-zA-Z])/g, "$1 $2")
     .toLowerCase()
     .trim();
 }
 
-async function fetchOFF(term: string): Promise<ProductResult["product"] | null> {
-  const url =
-    `${OFF_SEARCH}?search_terms=${encodeURIComponent(term)}` +
-    `&search_simple=1&action=process&json=1&page_size=5&fields=${OFF_FIELDS}`;
+async function fetchOFF(
+  term: string,
+  endpoint: string
+): Promise<ProductResult["product"] | null> {
+  const isLegacy = endpoint.includes("cgi/search");
+  const url = isLegacy
+    ? `${endpoint}?search_terms=${encodeURIComponent(term)}&search_simple=1&action=process&json=1&page_size=5&fields=${OFF_FIELDS}`
+    : `${endpoint}?search_terms=${encodeURIComponent(term)}&page_size=5&fields=${OFF_FIELDS}`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: { "User-Agent": "GoodNutrition/1.0 (contact@example.com)" },
+  });
   if (!response.ok) throw new Error(`${response.status}`);
 
   const data = (await response.json()) as OFFSearchResponse;
-  return data.products?.find((p) => p?.nutriments?.["energy-kcal_100g"] != null) ?? null;
+  return data.products?.find((p) => (p?.nutriments?.["energy-kcal_100g"] ?? 0) > 0) ?? null;
 }
 
 export async function searchFoodByName(
@@ -78,24 +84,25 @@ export async function searchFoodByName(
   const normalized = normalizeSearchTerm(name);
   const terms = normalized === name.toLowerCase().trim()
     ? [normalized]
-    : [normalized, name.trim()]; // try normalized first, fall back to original
+    : [normalized, name.trim()];
 
-  for (const term of terms) {
-    // retry once on 5xx (server-side transient errors)
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const product = await fetchOFF(term);
-        if (product) return product;
-        break; // got a valid response (0 results) — no point retrying
-      } catch (err: unknown) {
-        const status = err instanceof Error ? err.message : "";
-        const is5xx = /^5\d\d$/.test(status);
-        if (is5xx && attempt === 0) {
-          await new Promise((r) => setTimeout(r, 800));
-          continue;
+  for (const endpoint of [OFF_SEARCH_PRIMARY, OFF_SEARCH_FALLBACK]) {
+    for (const term of terms) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const product = await fetchOFF(term, endpoint);
+          if (product) return product;
+          break;
+        } catch (err: unknown) {
+          const status = err instanceof Error ? err.message : "";
+          const is5xx = /^5\d\d$/.test(status);
+          if (is5xx && attempt < 2) {
+            await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            continue;
+          }
+          console.warn(`[nutrition] OFF error (${endpoint}) for "${term}":`, err);
+          break;
         }
-        console.warn(`[nutrition] OFF error for "${term}":`, err);
-        break;
       }
     }
   }

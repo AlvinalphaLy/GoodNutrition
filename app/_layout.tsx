@@ -7,7 +7,7 @@ export default function RootLayout() {
     <ProfileProvider>
       {/* initialRouteName="(auth)" */}
       <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack screenOptions={{ headerShown: false }} initialRouteName="(auth)">
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="barcode-scan"
