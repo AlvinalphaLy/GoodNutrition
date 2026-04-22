@@ -2,17 +2,14 @@ import { useMemo } from "react";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { useProfile } from "../../../context/profileContext";
 import { formatQuantityLabel } from "../display";
 import { useMeals } from "../meals-context";
-
-const ingredientFlags = [
-  "Added sugar check placeholder",
-  "Sodium review placeholder",
-  "Processing level placeholder",
-];
+import { buildScoreSummary, summarizeNutritionEntries } from "../nutrition";
 
 export default function ReviewMealScreen() {
   const router = useRouter();
+  const { profile } = useProfile();
   const { loggedMealId, returnTo } = useLocalSearchParams<{ loggedMealId?: string; returnTo?: string }>();
   const {
     mealDraft,
@@ -25,19 +22,33 @@ export default function ReviewMealScreen() {
 
   const savedMeal = useMemo(
     () => loggedMeals.find((meal) => meal.id === loggedMealId),
-    [loggedMeals, loggedMealId]
+    [loggedMealId, loggedMeals]
   );
 
   const isViewingSavedMeal = !!savedMeal;
   const mealType = savedMeal?.mealType || mealDraft.mealType || "Not selected";
   const mealMethod = savedMeal?.method || mealDraft.method || "Not selected";
   const mealMode = savedMeal?.logMode || mealDraft.logMode;
-  const mealName = savedMeal?.mealName || mealDraft.mealName || (mealDraft.items.length === 1
-    ? mealDraft.items[0]?.name ?? "Item Entry"
-    : `${mealDraft.mealType || "Meal"} Log`);
+  const mealName =
+    savedMeal?.mealName ||
+    mealDraft.mealName ||
+    (mealDraft.items.length === 1
+      ? mealDraft.items[0]?.name ?? "Item Entry"
+      : `${mealDraft.mealType || "Meal"} Log`);
   const mealItems = savedMeal?.items || mealDraft.items;
   const servingsLogged = savedMeal?.servingsLogged || mealDraft.servingsLogged || "1";
   const canFinish = mealItems.length > 0;
+  const mealNutrition = useMemo(() => summarizeNutritionEntries(mealItems), [mealItems]);
+  const scoreSummary = useMemo(
+    () =>
+      buildScoreSummary(mealNutrition, {
+        calories: profile.calories,
+        protein: profile.protein,
+        carbs: profile.carb,
+        fat: profile.fat,
+      }),
+    [mealNutrition, profile.calories, profile.carb, profile.fat, profile.protein]
+  );
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -61,11 +72,20 @@ export default function ReviewMealScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Placeholder Eating Score</Text>
-        <Text style={styles.score}>{mealItems.length > 0 ? "82 / 100" : "--"}</Text>
-        <Text style={styles.cardText}>
-          Final scoring logic will be connected later when nutrition data is available.
-        </Text>
+        <Text style={styles.cardTitle}>Nutrition Summary</Text>
+        <Text style={styles.metricText}>{Math.round(mealNutrition.calories)} kcal</Text>
+        <Text style={styles.cardText}>Protein: {Math.round(mealNutrition.protein)}g</Text>
+        <Text style={styles.cardText}>Carbs: {Math.round(mealNutrition.carbs)}g</Text>
+        <Text style={styles.cardText}>Fat: {Math.round(mealNutrition.fat)}g</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Eating Score</Text>
+        <Text style={styles.score}>{scoreSummary.score} / 100</Text>
+        <Text style={styles.cardText}>Approximate rating: {scoreSummary.rating}/5</Text>
+        {scoreSummary.notes.map((note) => (
+          <Text key={note} style={styles.cardText}>• {note}</Text>
+        ))}
       </View>
 
       <View style={styles.card}>
@@ -77,11 +97,16 @@ export default function ReviewMealScreen() {
             <View key={item.id} style={styles.row}>
               <Text style={styles.rowTitle}>{item.name}</Text>
               <Text style={styles.rowText}>{formatQuantityLabel(item.quantity, item.unit)}</Text>
+              {item.nutrition ? (
+                <Text style={styles.rowMeta}>
+                  {Math.round(item.nutrition.calories)} kcal • {Math.round(item.nutrition.protein)}g protein • {Math.round(item.nutrition.carbs)}g carbs • {Math.round(item.nutrition.fat)}g fat
+                </Text>
+              ) : null}
               {item.entryKind === "meal" && item.nestedItems?.length ? (
                 <View style={styles.nestedList}>
                   {item.nestedItems.map((nestedItem) => (
                     <Text key={nestedItem.id} style={styles.nestedItemText}>
-                      o - {nestedItem.name} — {formatQuantityLabel(nestedItem.quantity, nestedItem.unit)}
+                      • {nestedItem.name} — {formatQuantityLabel(nestedItem.quantity, nestedItem.unit)}
                     </Text>
                   ))}
                 </View>
@@ -93,12 +118,16 @@ export default function ReviewMealScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Ingredient Review</Text>
-        {ingredientFlags.map((flag) => (
-          <View key={flag} style={styles.flagRow}>
-            <Text style={styles.flagBullet}>•</Text>
-            <Text style={styles.flagText}>{flag}</Text>
-          </View>
-        ))}
+        {mealNutrition.harmfulIngredientMatches.length === 0 ? (
+          <Text style={styles.cardText}>No harmful ingredients detected from the foods with ingredient data.</Text>
+        ) : (
+          mealNutrition.harmfulIngredientMatches.map((flag) => (
+            <View key={flag} style={styles.flagRow}>
+              <Text style={styles.flagBullet}>•</Text>
+              <Text style={styles.flagText}>{flag}</Text>
+            </View>
+          ))
+        )}
       </View>
 
       {isViewingSavedMeal && savedMeal ? (
@@ -187,6 +216,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 4,
   },
+  metricText: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 8,
+  },
   score: {
     fontSize: 32,
     fontWeight: "800",
@@ -207,6 +242,12 @@ const styles = StyleSheet.create({
   rowText: {
     fontSize: 14,
     color: "#6b7280",
+  },
+  rowMeta: {
+    fontSize: 13,
+    color: "#4b5563",
+    lineHeight: 20,
+    marginTop: 6,
   },
   nestedList: {
     marginTop: 8,
@@ -266,20 +307,19 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: "#22c55e",
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: "center",
-    marginTop: 4,
-  },
-  buttonDisabled: {
-    backgroundColor: "#d1d5db",
   },
   primaryButtonText: {
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
   },
+  buttonDisabled: {
+    backgroundColor: "#bbf7d0",
+  },
   buttonTextDisabled: {
-    color: "#374151",
+    color: "#6b7280",
   },
 });
