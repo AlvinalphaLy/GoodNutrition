@@ -454,7 +454,7 @@ export default function IngredientSearchScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Added Ingredients</Text>
           <Text style={styles.sectionText}>
-            Build the full recipe here, then review it once everything looks right.
+            Build the full recipe here, then review or edit it once everything looks right.
           </Text>
 
           {recipeDraft.ingredients.length === 0 ? (
@@ -477,13 +477,13 @@ export default function IngredientSearchScreen() {
                   </View>
                   <View style={styles.itemActionRow}>
                     <Pressable
-                      style={styles.inlineEditButton}
+                      style={styles.itemEditButton}
                       onPress={() => beginIngredientEdit(ingredient.id, ingredient.quantity, ingredient.unit)}
                     >
-                      <Text style={styles.inlineEditButtonText}>Edit</Text>
+                      <Text style={styles.itemEditButtonText}>Edit</Text>
                     </Pressable>
-                    <Pressable style={styles.removeButton} onPress={() => removeRecipeIngredient(ingredient.id)}>
-                      <Text style={styles.removeButtonText}>Remove</Text>
+                    <Pressable style={styles.itemRemoveButton} onPress={() => removeRecipeIngredient(ingredient.id)}>
+                      <Text style={styles.itemRemoveButtonText}>Remove</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -839,17 +839,17 @@ const styles = StyleSheet.create({
   },
   itemHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
   },
   itemActionRow: {
     flexDirection: "row",
     gap: 8,
+    flexShrink: 0,
   },
   itemTextWrap: {
     flex: 1,
-    marginRight: 12,
   },
   itemTitle: {
     fontSize: 15,
@@ -861,11 +861,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6b7280",
   },
-  removeButton: {
+  itemEditButton: {
+    backgroundColor: "#dcfce7",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 78,
+  },
+  itemEditButtonText: {
+    color: "#166534",
+    fontWeight: "700",
+  },
+  itemRemoveButton: {
     backgroundColor: "#fee2e2",
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 92,
   },
   inlineIngredientEditor: {
     marginTop: 12,
@@ -875,7 +891,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
-  removeButtonText: {
+  itemRemoveButtonText: {
     color: "#b91c1c",
     fontWeight: "700",
   },
