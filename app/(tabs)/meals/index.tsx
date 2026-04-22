@@ -25,90 +25,99 @@ export default function MealsHubScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Meals</Text>
-      <Text style={styles.subtitle}>Choose what you want to do next</Text>
+      <View style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Today&apos;s Logged Meals</Text>
+          <Text style={styles.sectionSubtitle}>
+            Tap a meal to review it, or use Edit / Delete from the list.
+          </Text>
 
-      <Pressable
-        style={styles.card}
-        onPress={() => {
-          beginNewMealDraft();
-          router.push(`/meals/log-meal/meal-type?returnTo=${encodeURIComponent("/meals")}` as Href);
-        }}
-      >
-        <Text style={styles.cardTitle}>Log Meal</Text>
-        <Text style={styles.cardText}>
-          Add items or meals to your log
-        </Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.card}
-        onPress={() => router.push("/meals/recipes" as Href)}
-      >
-        <Text style={styles.cardTitle}>Recipes</Text>
-        <Text style={styles.cardText}>
-          View existing recipes or create a new one
-        </Text>
-      </Pressable>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Today&apos;s Logged Meals</Text>
-        <Text style={styles.sectionSubtitle}>
-          Tap a meal to review it, or use Edit / Delete from the list.
-        </Text>
-
-        {todaysMeals.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No meals logged today</Text>
-            <Text style={styles.emptyText}>
-              After you finish a meal review, it will appear here.
-            </Text>
-          </View>
-        ) : (
-          todaysMeals.map((meal) => (
-            <View key={meal.id} style={styles.logCard}>
-              <Pressable
-                onPress={() =>
-                  router.push(
-                    `/meals/log-meal/review?loggedMealId=${meal.id}` as Href
-                  )
-                }
-              >
-                <Text style={styles.logTitle}>{meal.mealName || meal.mealType}</Text>
-                <Text style={styles.logMeta}>{meal.logMode === "meal" ? "Meal Entry" : "Item Entry"} • {meal.method}</Text>
-                <Text style={styles.logText}>
-                  {meal.items.length} item{meal.items.length === 1 ? "" : "s"}
-                  {meal.logMode === "meal" ? ` • ${meal.servingsLogged || "1"} serving(s)` : ""}
-                </Text>
-                {meal.items.map((item) => (
-                  <Text key={item.id} style={styles.logItemText}>
-                    • {item.name} — {formatQuantityLabel(item.quantity, item.unit)}
-                  </Text>
-                ))}
-                <Text style={styles.tapHint}>Tap to view details</Text>
-              </Pressable>
-
-              <View style={styles.actionRow}>
-                <Pressable
-                  style={styles.editButton}
-                  onPress={() => {
-                    startEditingLoggedMeal(meal.id);
-                    router.push(`/meals/log-meal/meal-type?returnTo=${encodeURIComponent("/meals")}` as Href);
-                  }}
-                >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.deleteButton}
-                  onPress={() => deleteLoggedMeal(meal.id)}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </Pressable>
-              </View>
+          {todaysMeals.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No meals logged today</Text>
+              <Text style={styles.emptyText}>
+                After you finish a meal review, it will appear here.
+              </Text>
             </View>
-          ))
-        )}
+          ) : (
+            todaysMeals.map((meal) => (
+              <View key={meal.id} style={styles.logCard}>
+                <Pressable
+                  onPress={() =>
+                    router.push(
+                      `/meals/log-meal/review?loggedMealId=${meal.id}` as Href
+                    )
+                  }
+                >
+                  <Text style={styles.logTitle}>{meal.mealName || meal.mealType}</Text>
+                  <Text style={styles.logMeta}>
+                    {meal.logMode === "meal" ? "Meal Entry" : "Item Entry"} • {meal.method}
+                  </Text>
+                  <Text style={styles.logText}>
+                    {meal.items.length} item{meal.items.length === 1 ? "" : "s"}
+                    {meal.logMode === "meal"
+                      ? ` • ${meal.servingsLogged || "1"} serving(s)`
+                      : ""}
+                  </Text>
+                  {meal.items.map((item) => (
+                    <Text key={item.id} style={styles.logItemText}>
+                      • {item.name} — {formatQuantityLabel(item.quantity, item.unit)}
+                    </Text>
+                  ))}
+                  <Text style={styles.tapHint}>Tap to view details</Text>
+                </Pressable>
+
+                <View style={styles.actionRow}>
+                  <Pressable
+                    style={styles.editButton}
+                    onPress={() => {
+                      startEditingLoggedMeal(meal.id);
+                      router.push(
+                        `/meals/log-meal/meal-type?returnTo=${encodeURIComponent("/meals")}` as Href
+                      );
+                    }}
+                  >
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.deleteButton}
+                    onPress={() => deleteLoggedMeal(meal.id)}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={styles.bottomActions}>
+          <Pressable
+            style={styles.actionCard}
+            onPress={() => {
+              beginNewMealDraft();
+              router.push(
+                `/meals/log-meal/meal-type?returnTo=${encodeURIComponent("/meals")}` as Href
+              );
+            }}
+          >
+            <Text style={styles.actionCardTitle}>Log Meal</Text>
+            <Text style={styles.actionCardText}>
+              Add items or meals to your log
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.actionCard}
+            onPress={() => router.push("/meals/recipes" as Href)}
+          >
+            <Text style={styles.actionCardTitle}>Recipes</Text>
+            <Text style={styles.actionCardText}>
+              Browse recipes or create a new one
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </ScrollView>
   );
@@ -116,40 +125,14 @@ export default function MealsHubScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flexGrow: 1,
     backgroundColor: "#f7f7f7",
     paddingHorizontal: 20,
-    paddingTop: 32,
+    paddingTop: 24,
     paddingBottom: 96,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: "#6b7280",
-    marginBottom: 24,
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
-  },
-  cardText: {
-    fontSize: 14,
-    color: "#6b7280",
-    lineHeight: 20,
+  content: {
+    flex: 1,
   },
   section: {
     marginTop: 8,
@@ -247,5 +230,32 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: "#b91c1c",
     fontWeight: "700",
+  },
+  bottomActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: "auto",
+    paddingTop: 24,
+  },
+  actionCard: {
+    flex: 1,
+    minHeight: 132,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    padding: 18,
+    justifyContent: "center",
+  },
+  actionCardTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  actionCardText: {
+    fontSize: 14,
+    color: "#6b7280",
+    lineHeight: 20,
   },
 });
