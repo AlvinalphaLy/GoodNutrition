@@ -2,8 +2,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useProfile } from "../context/profileContext";
 
+import { useProfile } from "../context/profileContext";
 import { colors } from "../lib/colors";
 
 const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {

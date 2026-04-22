@@ -20,6 +20,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+
 import { useProfile } from "../context/profileContext";
 
 export default function Profile() {
