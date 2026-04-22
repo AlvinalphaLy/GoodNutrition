@@ -22,6 +22,7 @@ import {
 } from "react-native";
 
 import { useProfile } from "../context/profileContext";
+import { colors } from "../lib/colors.js";
 
 export default function Profile() {
   const { profile, setProfile } = useProfile();
@@ -189,7 +190,6 @@ export default function Profile() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f2f2f2",
   },
   header: {
     alignItems: "center",
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   card: {
-    backgroundColor: "white",
+    backgroundColor: colors.white,
     margin: 20,
     padding: 20,
     borderRadius: 10,
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: colors.border,
     padding: 8,
     borderRadius: 6,
   },
