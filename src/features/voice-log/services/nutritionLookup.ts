@@ -1,20 +1,7 @@
+import { searchFoodByName } from "../../../../app/api/openFoodFacts";
 import type { NutritionInfo } from "../types/voice";
 
-const USDA_SEARCH = "https://api.nal.usda.gov/fdc/v1/foods/search";
-const API_KEY = process.env.EXPO_PUBLIC_USDA_API_KEY ?? "DEMO_KEY";
-
 const cache = new Map<string, NutritionInfo | null>();
-
-type USDANutrient = { nutrientId: number; value: number };
-type USDAFoodPortion = {
-  amount: number;
-  gramWeight: number;
-  measureUnit: { name: string };
-};
-type USDAFood = {
-  foodNutrients: USDANutrient[];
-  foodPortions?: USDAFoodPortion[];
-};
 
 const WEIGHT_UNITS: Record<string, number> = {
   g: 1, gram: 1, grams: 1,
@@ -24,39 +11,44 @@ const WEIGHT_UNITS: Record<string, number> = {
   ml: 1, l: 1000,
 };
 
-function getNutrientValue(nutrients: USDANutrient[], id: number): number {
-  return nutrients.find((n) => n.nutrientId === id)?.value ?? 0;
+function scaleMacro(value: number | null | undefined, f: number): number | null {
+  return value != null ? Math.round(value * f * 10) / 10 : null;
 }
 
 function scaleNutrition(per100g: NutritionInfo, grams: number): NutritionInfo {
   const f = grams / 100;
   return {
-    calories: Math.round(per100g.calories * f),
-    protein: Math.round(per100g.protein * f * 10) / 10,
-    carbs: Math.round(per100g.carbs * f * 10) / 10,
-    fat: Math.round(per100g.fat * f * 10) / 10,
+    ...per100g,
+    calories:      Math.round(per100g.calories * f),
+    protein:       scaleMacro(per100g.protein,       f) ?? 0,
+    carbs:         scaleMacro(per100g.carbs,         f) ?? 0,
+    fat:           scaleMacro(per100g.fat,           f) ?? 0,
+    saturated_fat: scaleMacro(per100g.saturated_fat, f),
+    sugars:        scaleMacro(per100g.sugars,        f),
+    fiber:         scaleMacro(per100g.fiber,         f),
+    salt:          scaleMacro(per100g.salt,          f),
+    sodium:        scaleMacro(per100g.sodium,        f),
   };
+}
+
+function parseServingGrams(servingSize: string | null): number | null {
+  if (!servingSize) return null;
+  const match = servingSize.match(/(\d+\.?\d*)\s*(g|oz|ml|kg|lb)/i);
+  if (!match) return null;
+  const amount = parseFloat(match[1]);
+  const unit = match[2].toLowerCase();
+  return amount * (WEIGHT_UNITS[unit] ?? 1);
 }
 
 function estimateGrams(
   quantity: number,
   unit: string | null,
-  portions: USDAFoodPortion[]
+  servingSize: string | null
 ): number {
   const u = unit?.toLowerCase().trim() ?? "";
-
   if (WEIGHT_UNITS[u]) return quantity * WEIGHT_UNITS[u];
-
-  if (portions.length > 0) {
-    const match = portions.find((p) => {
-      const pName = p.measureUnit.name.toLowerCase();
-      return u && (pName.includes(u) || u.includes(pName.split(" ")[0]));
-    });
-    const portion = match ?? portions[0];
-    return quantity * (portion.gramWeight / portion.amount);
-  }
-
-  // Fallback: treat quantity as servings of 100g each
+  const servingGrams = parseServingGrams(servingSize);
+  if (servingGrams) return quantity * servingGrams;
   return quantity * 100;
 }
 
@@ -70,47 +62,49 @@ export async function lookupNutrition(
   if (cache.has(cacheKey)) {
     const cached = cache.get(cacheKey)!;
     if (!cached) return null;
-    const grams = estimateGrams(quantity, unit, []);
+    const grams = estimateGrams(quantity, unit, null);
     return scaleNutrition(cached, grams);
   }
 
-  try {
-    const url =
-      `${USDA_SEARCH}?query=${encodeURIComponent(name)}` +
-      `&api_key=${API_KEY}&pageSize=5`;
-
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn(`[nutrition] USDA ${res.status} for "${name}"`);
-      return null;
-    }
-
-    const data = (await res.json()) as { foods?: USDAFood[] };
-    const food = data.foods?.[0];
-    if (!food) {
-      console.warn(`[nutrition] no results for "${name}"`);
-      return null;
-    }
-
-    const per100g: NutritionInfo = {
-      calories: getNutrientValue(food.foodNutrients, 1008),
-      protein:  getNutrientValue(food.foodNutrients, 1003),
-      carbs:    getNutrientValue(food.foodNutrients, 1005),
-      fat:      getNutrientValue(food.foodNutrients, 1004),
-    };
-
-    if (per100g.calories === 0 && per100g.protein === 0) {
-      console.warn(`[nutrition] empty nutrients for "${name}"`);
-      cache.set(cacheKey, null);
-      return null;
-    }
-
-    cache.set(cacheKey, per100g);
-    const grams = estimateGrams(quantity, unit, food.foodPortions ?? []);
-    console.log(`[nutrition] "${name}" → ${grams}g → ${per100g.calories} kcal/100g`);
-    return scaleNutrition(per100g, grams);
-  } catch (err) {
-    console.warn(`[nutrition] fetch error for "${name}":`, err);
+  const product = await searchFoodByName(name);
+  if (!product) {
+    cache.set(cacheKey, null);
     return null;
   }
+
+  const n = product.nutriments;
+  const per100g: NutritionInfo = {
+    calories:                n["energy-kcal_100g"]      ?? 0,
+    protein:                 n.proteins_100g            ?? 0,
+    carbs:                   n.carbohydrates_100g       ?? 0,
+    fat:                     n.fat_100g                 ?? 0,
+    saturated_fat:           n["saturated-fat_100g"],
+    sugars:                  n.sugars_100g,
+    fiber:                   n.fiber_100g,
+    salt:                    n.salt_100g,
+    sodium:                  n.sodium_100g,
+    serving_size:            product.serving_size,
+    brand:                   product.brands,
+    nova_group:              product.nova_group,
+    nutriscore_grade:        product.nutriscore_grade,
+    additives_tags:          product.additives_tags,
+    allergens_tags:          product.allergens_tags,
+    ingredients_analysis_tags: product.ingredients_analysis_tags,
+    nutrient_levels:         product.nutrient_levels,
+    ingredients_text:        product.ingredients_text,
+  };
+
+  if (per100g.calories === 0 && per100g.protein === 0) {
+    console.warn(`[nutrition] empty nutrients for "${name}"`);
+    cache.set(cacheKey, null);
+    return null;
+  }
+
+  cache.set(cacheKey, per100g);
+  const grams = estimateGrams(quantity, unit, product.serving_size);
+  console.log(
+    `[nutrition] "${name}" → ${grams}g → ${per100g.calories} kcal/100g` +
+    ` (nutriscore: ${per100g.nutriscore_grade ?? "?"}, nova: ${per100g.nova_group ?? "?"})`
+  );
+  return scaleNutrition(per100g, grams);
 }

@@ -71,19 +71,7 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="ai-chat-tab"
-          options={{
-            title: "AI",
-            headerShown: false,
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={
-                  focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"
-                }
-                color={color}
-                size={24}
-              />
-            ),
-          }}
+          options={{ href: null }}
         />
       </Tabs>
       </MealsProvider>

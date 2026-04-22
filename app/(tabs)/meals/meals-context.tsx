@@ -29,6 +29,26 @@ export type MealDraftItem = {
   protein?: number;
   carbs?: number;
   fat?: number;
+  saturated_fat?: number | null;
+  sugars?: number | null;
+  fiber?: number | null;
+  salt?: number | null;
+  sodium?: number | null;
+  // Open Food Facts metadata
+  serving_size?: string | null;
+  brand?: string | null;
+  nova_group?: number | null;
+  nutriscore_grade?: string | null;
+  additives_tags?: string[] | null;
+  allergens_tags?: string[] | null;
+  ingredients_analysis_tags?: string[] | null;
+  nutrient_levels?: {
+    fat: "low" | "moderate" | "high" | null;
+    "saturated-fat": "low" | "moderate" | "high" | null;
+    sugars: "low" | "moderate" | "high" | null;
+    salt: "low" | "moderate" | "high" | null;
+  } | null;
+  ingredients_text?: string | null;
 };
 
 type MealLogMode = "single" | "meal";

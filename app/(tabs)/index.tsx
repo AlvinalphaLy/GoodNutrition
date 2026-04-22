@@ -93,6 +93,15 @@ export default function Index() {
     return Math.round(scores.reduce((s, ms) => s + ms!.total, 0) / scores.length);
   }, [todaysMeals]);
 
+  const harmfulCount = useMemo(() => {
+    if (todaysMeals.length === 0) return 2; // placeholder when no meals
+    const allItems = todaysMeals.flatMap((m) => m.items);
+    const hasOffData = allItems.some((i) => i.additives_tags !== undefined);
+    if (!hasOffData) return null; // meals logged but no OFF data yet
+    const unique = new Set(allItems.flatMap((i) => i.additives_tags ?? []));
+    return unique.size;
+  }, [todaysMeals]);
+
   useEffect(() => {
     if (state.status === "preview") {
       pendingVoiceStore.set(state.result);
@@ -103,7 +112,7 @@ export default function Index() {
 
   return (
     <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
-      <Summary profile={profile} totals={todaysTotals} avgScore={avgScore} />
+      <Summary profile={profile} totals={todaysTotals} avgScore={avgScore} harmfulCount={harmfulCount} />
       <LogMeal onMicPress={startVoice} />
       <Meals meals={todaysMeals} />
       <VoiceRecorder state={state} onStop={stopVoice} onDismiss={reset} />
@@ -115,10 +124,12 @@ const Summary = ({
   profile,
   totals,
   avgScore,
+  harmfulCount,
 }: {
   profile: ProfileData;
   totals: { calories: number; protein: number; carbs: number; fat: number };
   avgScore: number | null;
+  harmfulCount: number | null;
 }) => (
   <View>
     <Text style={styles.header}>Today&apos;s Summary</Text>
@@ -130,18 +141,24 @@ const Summary = ({
           <Score score={avgScore} />
         </View>
         <Separator />
-        <HarmfulIngredientsSummary count={2} />
+        <HarmfulIngredientsSummary count={harmfulCount} />
       </View>
     </View>
   </View>
 );
 
-const HarmfulIngredientsSummary = ({ count }: { count: number }) => (
-  <Pressable style={styles.harmfulRow} onPress={() => console.log("pressed")}>
-    <Text style={styles.harmfulText}>{count} harmful ingredients detected</Text>
-    <Ionicons name="chevron-forward" size={18} color={colors.textMedium} />
-  </Pressable>
-);
+const HarmfulIngredientsSummary = ({ count }: { count: number | null }) => {
+  if (count === null) return null;
+  const isClean = count === 0;
+  return (
+    <Pressable style={styles.harmfulRow} onPress={() => console.log("pressed")}>
+      <Text style={[styles.harmfulText, isClean && { color: colors.successText }]}>
+        {isClean ? "No additives detected" : `${count} additive${count > 1 ? "s" : ""} detected`}
+      </Text>
+      <Ionicons name="chevron-forward" size={18} color={colors.textMedium} />
+    </Pressable>
+  );
+};
 
 const Score = ({ score }: { score: number | null }) => {
   const color = score === null ? colors.danger : gradeColor(
