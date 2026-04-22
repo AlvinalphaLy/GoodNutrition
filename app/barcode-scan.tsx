@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -12,49 +12,53 @@ export default function BarcodeScan() {
   const [permission, requestPermission] = useCameraPermissions();
 
   if (!permission) {
-    // Camera permissions are still loading.
     return <View />;
   }
 
   if (!permission.granted) {
-    // Camera permissions are not granted yet.
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>
-          We need your permission to show the camera
-        </Text>
+        <Text style={styles.message}>We need your permission to show the camera</Text>
         <Pressable style={styles.button} onPress={requestPermission}>
-          <Text style={{ color: colors.white, fontSize: 16 }}>
-            {" "}
-            Grant Permission
-          </Text>
+          <Text style={styles.buttonText}>Grant Permission</Text>
         </Pressable>
       </View>
     );
   }
+
   return <Camera />;
 }
 
 const Camera = () => {
   const [scanned, setScanned] = useState(false);
   const [torch, setTorch] = useState(false);
-  const [flashType, setFlashType] = useState<"flash" | "flash-off">(
-    "flash-off",
+  const [flashType, setFlashType] = useState<"flash" | "flash-off">("flash-off");
+  const params = useLocalSearchParams<{
+    returnTo?: string | string[];
+    finalReturnTo?: string | string[];
+  }>();
+  const router = useRouter();
+
+  const returnTo = useMemo(
+    () => (Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo),
+    [params.returnTo]
+  );
+  const finalReturnTo = useMemo(
+    () => (Array.isArray(params.finalReturnTo) ? params.finalReturnTo[0] : params.finalReturnTo),
+    [params.finalReturnTo]
   );
 
-  const router = useRouter();
-  // Reset state when moving back from product-result
   useFocusEffect(
     useCallback(() => {
       setScanned(false);
-    }, []),
+    }, [])
   );
 
   return (
     <View style={styles.container}>
       <CameraView
         style={styles.camera}
-        facing={"back"}
+        facing="back"
         enableTorch={torch}
         barcodeScannerSettings={{
           barcodeTypes: ["upc_a", "upc_e", "ean13"],
@@ -62,17 +66,20 @@ const Camera = () => {
         onBarcodeScanned={({ data }) => {
           if (scanned) return;
 
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setScanned(true);
           setTorch(false);
 
           router.push({
-            pathname: "../product-result",
-            params: { code: data },
+            pathname: "/product-result",
+            params: {
+              code: data,
+              returnTo,
+              finalReturnTo,
+            },
           });
         }}
       />
-      {/* Dark overlays around scanner */}
       <View style={styles.overlayTop} pointerEvents="none" />
       <View style={styles.overlayBottom} pointerEvents="none" />
       <View style={styles.overlayLeft} pointerEvents="none" />
@@ -82,8 +89,8 @@ const Camera = () => {
       <Pressable
         style={styles.flashlight}
         onPress={() => {
-          setTorch(!torch);
-          setFlashType(torch ? "flash-off" : "flash");
+          setTorch((prev) => !prev);
+          setFlashType((prev) => (prev === "flash" ? "flash-off" : "flash"));
         }}
       >
         <Ionicons name={flashType} size={28} color={colors.white} />
@@ -110,7 +117,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: "37.5%", // (100% - 25%) / 2
+    height: "37.5%",
     backgroundColor: "rgba(0, 0, 0, 0.75)",
   },
   overlayBottom: {
@@ -118,14 +125,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: "37.5%", // (100% - 25%) / 2
+    height: "37.5%",
     backgroundColor: "rgba(0, 0, 0, 0.75)",
   },
   overlayLeft: {
     position: "absolute",
     top: "37.5%",
     left: 0,
-    width: "10%", // (100% - 80%) / 2
+    width: "10%",
     height: "25%",
     backgroundColor: "rgba(0, 0, 0, 0.75)",
   },
@@ -133,7 +140,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: "37.5%",
     right: 0,
-    width: "10%", // (100% - 80%) / 2
+    width: "10%",
     height: "25%",
     backgroundColor: "rgba(0, 0, 0, 0.75)",
   },
@@ -145,7 +152,6 @@ const styles = StyleSheet.create({
     width: "80%",
     height: "25%",
     alignSelf: "center",
-    // Add glow effect
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
@@ -159,7 +165,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     padding: 12,
     borderRadius: 50,
-    // Add subtle shadow
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -174,12 +179,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     alignSelf: "center",
-    // ios
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
-    // android
     elevation: 8,
+  },
+  buttonText: {
+    color: colors.white,
+    fontSize: 16,
   },
 });

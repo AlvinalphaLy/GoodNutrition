@@ -1,78 +1,90 @@
-import { useLocalSearchParams } from "expo-router";
-import { Text } from "@react-navigation/elements";
+import { useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import {
-  Pressable,
-  View,
-  StyleSheet,
-  ScrollView,
-  TextInput,
   ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
-import { useState, useEffect } from "react";
 
-import { getData, ProductResult } from "./api/openFoodFacts";
+import { getData, type ProductResult } from "../src/lib/openFoodFacts";
 import { colors } from "./lib/colors";
+import { useMeals } from "./(tabs)/meals/meals-context";
+import { buildOpenFoodFactsNutrition, buildScoreSummary, type NutritionInfo } from "./(tabs)/meals/nutrition";
+import { useProfile } from "./context/profileContext";
 
 type TabType = "serving" | "100g";
+type ProductDetails = ProductResult["product"];
 
-type ProductBrandProps = {
-  productName: ProductResult["product"]["product_name"];
-  productBrand: ProductResult["product"]["brands"];
-  nutriScore: ProductResult["product"]["nutriscore_grade"];
-  novaGroup: ProductResult["product"]["nova_group"];
-};
-
-type HarmfulIngredientsProps = {
-  additivesTags: ProductResult["product"]["additives_tags"];
-  allergensTags: ProductResult["product"]["allergens_tags"];
-};
-
-type CaloriesProps = {
-  caloriesPer100g: ProductResult["product"]["nutriments"]["energy-kcal_100g"];
-  caloriesPerServing: ProductResult["product"]["nutriments"]["energy-kcal_serving"];
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
-  grams: string;
-  onGramsChange: (value: string) => void;
-  servings: string;
-  onServingsChange: (value: string) => void;
-};
-
-type NutrientLevelsProps = {
-  nutrientLevels: ProductResult["product"]["nutrient_levels"];
-};
-
-type MacrosProps = {
-  nutriments: ProductResult["product"]["nutriments"];
-  activeTab: TabType;
-};
-
-type AllergensProps = {
-  allergensTags: ProductResult["product"]["allergens_tags"];
-};
-
-type IngredientsProps = {
-  ingredientsText: ProductResult["product"]["ingredients_text"];
-};
+const normalizeParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
 
 export default function Product() {
-  const { code } = useLocalSearchParams<{ code?: string }>();
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    code?: string | string[];
+    returnTo?: string | string[];
+    finalReturnTo?: string | string[];
+  }>();
+  const { profile } = useProfile();
+  const { addMealItem, mealDraft, setMealLogMode, setMealMethod, setMealType } = useMeals();
+
+  const code = normalizeParam(params.code);
+  const returnTo = normalizeParam(params.returnTo);
+  const finalReturnTo = normalizeParam(params.finalReturnTo);
   const [product, setProduct] = useState<ProductResult | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("serving");
   const [grams, setGrams] = useState("100");
   const [servings, setServings] = useState("1");
+  const [logMessage, setLogMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+
     async function load() {
-      if (!code) return <Text>Whoops, no code found.</Text>;
+      if (!code) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       const data = await getData(code);
-      if (data) setProduct(data);
+      if (active) {
+        setProduct(data ?? null);
+        setLoading(false);
+      }
     }
 
-    load();
+    void load();
+
+    return () => {
+      active = false;
+    };
   }, [code]);
 
-  if (!product) {
+  const details = product?.product;
+  const amount = activeTab === "100g" ? grams : servings;
+  const nutrition = useMemo(
+    () => (details ? buildOpenFoodFactsNutrition(details, amount, activeTab === "100g" ? "g" : "serving") : null),
+    [activeTab, amount, details]
+  );
+  const scoreSummary = useMemo(
+    () =>
+      nutrition
+        ? buildScoreSummary(nutrition, {
+            calories: profile.calories,
+            protein: profile.protein,
+            carbs: profile.carb,
+            fat: profile.fat,
+          })
+        : null,
+    [nutrition, profile.calories, profile.carb, profile.fat, profile.protein]
+  );
+
+  if (loading) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" color={colors.primaryBlue} />
@@ -80,338 +92,188 @@ export default function Product() {
     );
   }
 
-  // Destructure product so we don't have to awkwardly write product.product
-  const { product: details } = product;
+  if (!details || !code) {
+    return (
+      <View style={styles.loader}>
+        <Text style={styles.emptyText}>We couldn&apos;t load this Open Food Facts item.</Text>
+      </View>
+    );
+  }
+
+  const selectedAmountValid = Number(amount) > 0 || /\d/.test(amount);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <ProductSummary
-        productName={details.product_name}
-        productBrand={details.brands}
-        nutriScore={details.nutriscore_grade}
-        novaGroup={details.nova_group}
-      />
-      <HarmfulIngredients
-        additivesTags={details.additives_tags}
-        allergensTags={details.allergens_tags}
-      />
-      <Calories
-        caloriesPerServing={details.nutriments["energy-kcal_serving"]}
-        caloriesPer100g={details.nutriments["energy-kcal_100g"]}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        grams={grams}
-        onGramsChange={setGrams}
-        servings={servings}
-        onServingsChange={setServings}
-      />
-      <NutrientLevels nutrientLevels={details.nutrient_levels} />
-      <Macros nutriments={details.nutriments} activeTab={activeTab} />
-      <Allergens allergensTags={details.allergens_tags} />
-      <Ingredients ingredientsText={details.ingredients_text} />
-    </ScrollView>
-  );
-}
-
-const ProductSummary = ({
-  productName,
-  productBrand,
-  nutriScore,
-  novaGroup,
-}: ProductBrandProps) => {
-  const nova = novaStyle(novaGroup);
-  const nutri = nutriStyle(nutriScore);
-  const isNotApplicable = !nutriScore || nutriScore === "not-applicable";
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.productName}>{productName}</Text>
-      <Text style={styles.brandName}>{productBrand ?? "Unknown brand"}</Text>
-      <View style={styles.badgeRow}>
-        <View
-          style={[
-            styles.badge,
-            {
-              backgroundColor: isNotApplicable ? colors.background : nutri?.bg,
-              borderWidth: 1,
-              borderColor: isNotApplicable ? colors.border : nutri?.text,
-            },
-          ]}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              color: isNotApplicable ? colors.textMedium : nutri?.text,
-            }}
-          >
-            {isNotApplicable
-              ? "Nutri-score N/A"
-              : `Nutri-score ${nutriScore.toUpperCase()}`}
-          </Text>
-        </View>
-        {novaGroup && (
-          <View
-            style={[
-              styles.badge,
-              {
-                backgroundColor: nova.bg,
-                borderWidth: 1,
-                borderColor: nova.text,
-              },
-            ]}
-          >
-            <Text style={{ fontSize: 11, color: nova.text }}>
-              NOVA {novaGroup}
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-};
-
-const HarmfulIngredients = ({
-  additivesTags,
-  allergensTags,
-}: HarmfulIngredientsProps) => {
-  const additivesCount = additivesTags?.length ?? 0;
-  const allergensCount = allergensTags?.length ?? 0;
-  if (additivesCount === 0 && allergensCount === 0) return null;
-
-  return (
-    <View style={[styles.card, styles.dangerCard]}>
-      <Text style={styles.dangerCardTitle}>Harmful ingredients detected</Text>
-      <View style={styles.detectedContainer}>
-        <Text style={styles.dangerCardText}>{additivesCount} additives</Text>
-        <Text style={styles.dangerCardText}> · </Text>
-        <Text style={styles.dangerCardText}>{allergensCount} allergens</Text>
-      </View>
-    </View>
-  );
-};
-
-const Calories = ({
-  caloriesPer100g,
-  caloriesPerServing,
-  activeTab,
-  onTabChange,
-  grams,
-  onGramsChange,
-  servings,
-  onServingsChange,
-}: CaloriesProps) => {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.sectionLabel}>Calories</Text>
-      <View style={styles.tabRow}>
-        <Pressable
-          style={[styles.tab, activeTab === "serving" && styles.tabActive]}
-          onPress={() => onTabChange("serving")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "serving" && styles.tabTextActive,
-            ]}
-          >
-            Per serving
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === "100g" && styles.tabActive]}
-          onPress={() => onTabChange("100g")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "100g" && styles.tabTextActive,
-            ]}
-          >
-            Per gram
-          </Text>
-        </Pressable>
-      </View>
-      <View style={styles.calItem}>
-        <Text style={styles.calNumber}>
-          {activeTab === "100g"
-            ? (caloriesPer100g ?? "N/A")
-            : (caloriesPerServing ?? "N/A")}
-        </Text>
-        <Text style={styles.calLabel}>
-          {activeTab === "100g" ? "kcal / 100g" : "kcal / serving"}
-        </Text>
-      </View>
-      <View style={styles.logInputRow}>
-        <TextInput
-          style={styles.logInput}
-          keyboardType="numeric"
-          value={activeTab === "100g" ? grams : servings}
-          onChangeText={activeTab === "100g" ? onGramsChange : onServingsChange}
-          placeholder={activeTab === "100g" ? "Enter grams" : "Enter servings"}
-          placeholderTextColor={colors.textLight}
-        />
-        <Text style={styles.inputLabel}>
-          {activeTab === "100g" ? "g" : "servings"}
-        </Text>
-      </View>
-      <Pressable style={styles.logButton}>
-        <Text style={styles.logButtonText}>
-          {activeTab === "100g" ? "Log by gram" : "Log by serving"}
-        </Text>
-      </Pressable>
-    </View>
-  );
-};
-
-const NutrientLevels = ({ nutrientLevels }: NutrientLevelsProps) => {
-  const rows: { label: string; value: string | null | undefined }[] = [
-    { label: "Fat", value: nutrientLevels?.fat },
-    { label: "Saturated fat", value: nutrientLevels?.["saturated-fat"] },
-    { label: "Sugars", value: nutrientLevels?.sugars },
-    { label: "Salt", value: nutrientLevels?.salt },
-  ];
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.sectionLabel}>Nutrient levels</Text>
-      {rows.map(({ label, value }) => {
-        const { badge, text } = levelStyle(value);
-        return (
-          <View key={label} style={styles.nutrientRow}>
-            <Text style={styles.nutrientLabel}>{label}</Text>
-            <View style={[styles.badge, badge]}>
-              <Text style={text}>{value ?? "N/A"}</Text>
+      <View style={styles.card}>
+        <Text style={styles.productName}>{details.product_name || "Unknown product"}</Text>
+        <Text style={styles.brandName}>{details.brands ?? "Unknown brand"}</Text>
+        <View style={styles.badgeRow}>
+          {details.nutriscore_grade ? (
+            <View style={[styles.badge, styles.badgeNeutral]}>
+              <Text style={styles.badgeNeutralText}>
+                Nutri-score {details.nutriscore_grade.toUpperCase()}
+              </Text>
             </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-};
-
-const Macros = ({ nutriments, activeTab }: MacrosProps) => {
-  const rows = [
-    {
-      label: "Proteins",
-      per100g: nutriments.proteins_100g,
-      perServing: nutriments.proteins_serving,
-    },
-    {
-      label: "Carbohydrates",
-      per100g: nutriments.carbohydrates_100g,
-      perServing: nutriments.carbohydrates_serving,
-    },
-    {
-      label: "Fat",
-      per100g: nutriments.fat_100g,
-      perServing: nutriments.fat_serving,
-    },
-    {
-      label: "Saturated fat",
-      per100g: nutriments["saturated-fat_100g"],
-      // perServing: nutriments["saturated-fat_serving"] ?? null,
-    },
-    {
-      label: "Sugars",
-      per100g: nutriments.sugars_100g,
-      perServing: nutriments.sugars_serving,
-    },
-    {
-      label: "Fiber",
-      per100g: nutriments.fiber_100g,
-      perServing: nutriments.fiber_serving,
-    },
-    {
-      label: "Salt",
-      per100g: nutriments.salt_100g,
-      perServing: nutriments.salt_serving,
-    },
-  ];
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.sectionLabel}>Nutrients</Text>
-      <View style={styles.macroHeaderRow}>
-        <Text style={[styles.macroCell, { flex: 2 }]} />
-        <Text style={styles.macroHeaderCell}>
-          {activeTab === "100g" ? "100g" : "Serving"}
-        </Text>
+          ) : null}
+          {details.nova_group ? (
+            <View style={[styles.badge, styles.badgeWarning]}>
+              <Text style={styles.badgeWarningText}>NOVA {details.nova_group}</Text>
+            </View>
+          ) : null}
+          {details.serving_size ? (
+            <View style={[styles.badge, styles.badgeSuccess]}>
+              <Text style={styles.badgeSuccessText}>{details.serving_size}</Text>
+            </View>
+          ) : null}
+        </View>
       </View>
-      {rows.map(({ label, per100g, perServing }) => {
-        const value = activeTab === "100g" ? per100g : perServing;
-        return (
-          <View key={label} style={styles.macroRow}>
-            <Text style={[styles.macroCell, { flex: 2 }]}>{label}</Text>
-            <Text style={styles.macroValueCell}>
-              {value != null ? `${value}g` : "N/A"}
+
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Log this item</Text>
+        <View style={styles.tabRow}>
+          <Pressable
+            style={[styles.tab, activeTab === "serving" && styles.tabActive]}
+            onPress={() => setActiveTab("serving")}
+          >
+            <Text style={[styles.tabText, activeTab === "serving" && styles.tabTextActive]}>Per serving</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === "100g" && styles.tabActive]}
+            onPress={() => setActiveTab("100g")}
+          >
+            <Text style={[styles.tabText, activeTab === "100g" && styles.tabTextActive]}>Per 100g</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.logInputRow}>
+          <TextInput
+            style={styles.logInput}
+            keyboardType="numbers-and-punctuation"
+            value={amount}
+            onChangeText={activeTab === "100g" ? setGrams : setServings}
+            placeholder={activeTab === "100g" ? "Enter grams" : "Enter servings"}
+            placeholderTextColor={colors.textLight}
+          />
+          <Text style={styles.inputLabel}>{activeTab === "100g" ? "g" : "servings"}</Text>
+        </View>
+
+        <Text style={styles.logSummaryText}>
+          {nutrition
+            ? `${Math.round(nutrition.calories)} kcal • ${Math.round(nutrition.protein)}g protein • ${Math.round(nutrition.carbs)}g carbs • ${Math.round(nutrition.fat)}g fat`
+            : "Nutrition is unavailable for the selected log mode."}
+        </Text>
+
+        {logMessage ? <Text style={styles.errorText}>{logMessage}</Text> : null}
+
+        <Pressable
+          style={[styles.logButton, (!selectedAmountValid || !nutrition) && styles.logButtonDisabled]}
+          disabled={!selectedAmountValid || !nutrition}
+          onPress={() => {
+            if (!nutrition) {
+              setLogMessage("This item does not have enough nutrition data to log in the selected mode.");
+              return;
+            }
+
+            setLogMessage(null);
+            setMealMethod("Barcode");
+            if (!mealDraft.mealType) {
+              setMealType("Snack");
+            }
+            setMealLogMode("single");
+            addMealItem({
+              name: details.product_name || "Scanned item",
+              brand: details.brands ?? undefined,
+              quantity: amount,
+              unit: activeTab === "100g" ? "g" : "serving",
+              entryKind: "single",
+              sourceType: "off",
+              offProductCode: code,
+              nutrition,
+            });
+
+            const nextRoute = returnTo || "/meals/log-meal/review";
+            const finalTarget = finalReturnTo || "/meals";
+            const separator = nextRoute.includes("?") ? "&" : "?";
+            const target = `${nextRoute}${separator}returnTo=${encodeURIComponent(finalTarget)}`;
+            router.replace(target as Href);
+          }}
+        >
+          <Text style={styles.logButtonText}>
+            {activeTab === "100g" ? "Add to Meals by gram" : "Add to Meals by serving"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {nutrition ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>Estimated impact on today&apos;s score</Text>
+          <Text style={styles.scoreValue}>{scoreSummary?.score ?? 0} / 100</Text>
+          <Text style={styles.sectionText}>Approximate rating: {scoreSummary?.rating ?? 0}/5</Text>
+          {(scoreSummary?.notes ?? []).slice(0, 3).map((note) => (
+            <Text key={note} style={styles.sectionText}>• {note}</Text>
+          ))}
+        </View>
+      ) : null}
+
+      {details.additives_tags?.length || details.allergens_tags?.length || nutrition?.harmfulIngredientMatches.length ? (
+        <View style={[styles.card, styles.dangerCard]}>
+          <Text style={styles.dangerCardTitle}>Ingredient flags</Text>
+          {nutrition?.harmfulIngredientMatches.length ? (
+            <Text style={styles.dangerCardText}>
+              Harmful ingredient matches: {nutrition.harmfulIngredientMatches.join(", ")}
             </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-};
+          ) : null}
+          {details.additives_tags?.length ? (
+            <Text style={styles.dangerCardText}>OFF additives: {details.additives_tags.length}</Text>
+          ) : null}
+          {details.allergens_tags?.length ? (
+            <Text style={styles.dangerCardText}>OFF allergens: {details.allergens_tags.length}</Text>
+          ) : null}
+        </View>
+      ) : null}
 
-const Allergens = ({ allergensTags }: AllergensProps) => {
-  if (!allergensTags || allergensTags.length === 0) return null;
-
-  return (
-    <View style={[styles.card, styles.dangerCard]}>
-      <Text style={styles.dangerCardTitle}>Allergens</Text>
-      <View style={styles.tagRow}>
-        {allergensTags.map((tag) => (
-          <View key={tag} style={[styles.badge, styles.badgeDanger]}>
-            <Text style={styles.badgeDangerText}>{tag.replace("en:", "")}</Text>
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Nutrient levels</Text>
+        {[
+          { label: "Fat", value: details.nutrient_levels?.fat },
+          { label: "Saturated fat", value: details.nutrient_levels?.["saturated-fat"] },
+          { label: "Sugars", value: details.nutrient_levels?.sugars },
+          { label: "Salt", value: details.nutrient_levels?.salt },
+        ].map((row) => (
+          <View key={row.label} style={styles.nutrientRow}>
+            <Text style={styles.nutrientLabel}>{row.label}</Text>
+            <Text style={styles.nutrientValue}>{row.value ?? "N/A"}</Text>
           </View>
         ))}
       </View>
-    </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Nutrients</Text>
+        {[
+          { label: "Calories", value: activeTab === "100g" ? details.nutriments["energy-kcal_100g"] : details.nutriments["energy-kcal_serving"], suffix: "kcal" },
+          { label: "Protein", value: activeTab === "100g" ? details.nutriments.proteins_100g : details.nutriments.proteins_serving, suffix: "g" },
+          { label: "Carbs", value: activeTab === "100g" ? details.nutriments.carbohydrates_100g : details.nutriments.carbohydrates_serving, suffix: "g" },
+          { label: "Fat", value: activeTab === "100g" ? details.nutriments.fat_100g : details.nutriments.fat_serving, suffix: "g" },
+          { label: "Sugar", value: activeTab === "100g" ? details.nutriments.sugars_100g : details.nutriments.sugars_serving, suffix: "g" },
+          { label: "Fiber", value: activeTab === "100g" ? details.nutriments.fiber_100g : details.nutriments.fiber_serving, suffix: "g" },
+          { label: "Salt", value: activeTab === "100g" ? details.nutriments.salt_100g : details.nutriments.salt_serving, suffix: "g" },
+        ].map((row) => (
+          <View key={row.label} style={styles.nutrientRow}>
+            <Text style={styles.nutrientLabel}>{row.label}</Text>
+            <Text style={styles.nutrientValue}>{row.value != null ? `${row.value}${row.suffix}` : "N/A"}</Text>
+          </View>
+        ))}
+      </View>
+
+      {details.ingredients_text ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>Ingredients</Text>
+          <Text style={styles.ingredientsText}>{details.ingredients_text}</Text>
+        </View>
+      ) : null}
+    </ScrollView>
   );
-};
-
-const Ingredients = ({ ingredientsText }: IngredientsProps) => {
-  if (!ingredientsText) return null;
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.sectionLabel}>Ingredients</Text>
-      <Text style={styles.ingredientsText}>{ingredientsText}</Text>
-    </View>
-  );
-};
-
-/* STYLES */
-
-const levelStyle = (level: string | null | undefined) => {
-  if (level === "high")
-    return { badge: styles.badgeDanger, text: styles.badgeDangerText };
-  if (level === "moderate")
-    return { badge: styles.badgeWarning, text: styles.badgeWarningText };
-  if (level === "low")
-    return { badge: styles.badgeSuccess, text: styles.badgeSuccessText };
-  return { badge: styles.badgeNeutral, text: styles.badgeNeutralText };
-};
-
-const novaStyle = (novaGroup: number | null) => {
-  if (novaGroup === 1) return { bg: colors.nova1Light, text: colors.nova1Text };
-  if (novaGroup === 2) return { bg: colors.nova2Light, text: colors.nova2Text };
-  if (novaGroup === 3) return { bg: colors.nova3Light, text: colors.nova3Text };
-  if (novaGroup === 4) return { bg: colors.nova4Light, text: colors.nova4Text };
-  return { bg: colors.background, text: colors.textMedium };
-};
-
-const nutriStyle = (nutriScore: string | null) => {
-  if (nutriScore === "a")
-    return { bg: colors.nutriALight, text: colors.nutriA };
-  if (nutriScore === "b")
-    return { bg: colors.nutriBLight, text: colors.nutriB };
-  if (nutriScore === "c")
-    return { bg: colors.nutriCLight, text: colors.nutriC };
-  if (nutriScore === "d")
-    return { bg: colors.nutriDLight, text: colors.nutriD };
-  if (nutriScore === "e")
-    return { bg: colors.nutriELight, text: colors.nutriE };
-};
+}
 
 const styles = StyleSheet.create({
   screen: {
@@ -419,189 +281,188 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    padding: 10,
+    padding: 12,
     gap: 12,
+    paddingBottom: 40,
   },
   loader: {
     flex: 1,
     justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  emptyText: {
+    color: colors.textMedium,
+    fontSize: 15,
   },
   card: {
     backgroundColor: colors.white,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
-    gap: 6,
+    padding: 14,
+    gap: 8,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 3,
   },
   dangerCard: {
-    borderColor: colors.danger,
     backgroundColor: colors.dangerLight,
+    borderColor: colors.danger,
   },
   dangerCardTitle: {
-    fontWeight: "500",
+    fontSize: 16,
+    fontWeight: "700",
     color: colors.dangerText,
   },
   dangerCardText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.dangerText,
-  },
-  detectedContainer: {
-    flexDirection: "row",
+    lineHeight: 20,
   },
   productName: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 22,
+    fontWeight: "700",
     color: colors.textDark,
   },
   brandName: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textMedium,
   },
   badgeRow: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 4,
-  },
-  tagRow: {
-    flexDirection: "row",
     flexWrap: "wrap",
-    gap: 4,
+    gap: 8,
+    marginTop: 4,
   },
   badge: {
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  badgeSuccess: { backgroundColor: colors.successLight },
-  badgeSuccessText: { fontSize: 12, color: colors.successText },
-  badgeWarning: { backgroundColor: colors.warningLight },
-  badgeWarningText: { fontSize: 12, color: colors.warningText },
-  badgeDanger: { backgroundColor: colors.dangerLight },
-  badgeDangerText: { fontSize: 12, color: colors.dangerText },
-  badgeNeutral: { backgroundColor: colors.background },
-  badgeNeutralText: { fontSize: 12, color: colors.textMedium },
+  badgeNeutral: {
+    backgroundColor: colors.background,
+  },
+  badgeNeutralText: {
+    fontSize: 12,
+    color: colors.textDark,
+  },
+  badgeSuccess: {
+    backgroundColor: colors.successLight,
+  },
+  badgeSuccessText: {
+    fontSize: 12,
+    color: colors.successText,
+  },
+  badgeWarning: {
+    backgroundColor: colors.warningLight,
+  },
+  badgeWarningText: {
+    fontSize: 12,
+    color: colors.warningText,
+  },
   sectionLabel: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.textDark,
+  },
+  sectionText: {
+    fontSize: 14,
     color: colors.textMedium,
-    marginBottom: 4,
+    lineHeight: 20,
   },
   tabRow: {
     flexDirection: "row",
     backgroundColor: colors.background,
     borderRadius: 8,
     padding: 3,
-    marginBottom: 4,
   },
   tab: {
     flex: 1,
-    paddingVertical: 6,
+    paddingVertical: 8,
     alignItems: "center",
     borderRadius: 6,
   },
   tabActive: {
     backgroundColor: colors.white,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 2,
   },
   tabText: {
     color: colors.textMedium,
   },
   tabTextActive: {
     color: colors.textDark,
+    fontWeight: "700",
+  },
+  logInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  logInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.textDark,
+    backgroundColor: colors.background,
+  },
+  inputLabel: {
+    color: colors.textMedium,
+    minWidth: 58,
+    textAlign: "right",
+  },
+  logSummaryText: {
+    fontSize: 14,
+    color: colors.textMedium,
+    lineHeight: 20,
+  },
+  errorText: {
+    color: colors.dangerText,
+    fontSize: 13,
     fontWeight: "600",
   },
-  calItem: {
+  logButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: "center",
-    paddingVertical: 4,
   },
-  calNumber: {
-    fontSize: 26,
-    fontWeight: "500",
-    color: colors.textDark,
+  logButtonDisabled: {
+    opacity: 0.5,
   },
-  calLabel: {
-    fontSize: 12,
-    color: colors.textLight,
+  logButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  scoreValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.primary,
   },
   nutrientRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 3,
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   nutrientLabel: {
     color: colors.textDark,
+    fontSize: 14,
   },
-  macroHeaderRow: {
-    flexDirection: "row",
-    paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  macroRow: {
-    flexDirection: "row",
-    paddingVertical: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  macroCell: {
-    flex: 1,
-    color: colors.textDark,
-  },
-  macroHeaderCell: {
-    flex: 1,
-    fontSize: 10,
-    color: colors.textLight,
-    textAlign: "right",
-  },
-  macroValueCell: {
-    flex: 1,
-    color: colors.textDark,
-    textAlign: "right",
+  nutrientValue: {
+    color: colors.textMedium,
+    fontSize: 14,
+    fontWeight: "600",
   },
   ingredientsText: {
-    fontSize: 12,
     color: colors.textMedium,
-    lineHeight: 18,
-  },
-  logInputRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    lineHeight: 22,
     fontSize: 14,
-    color: colors.textDark,
-  },
-  inputLabel: {
-    fontSize: 13,
-    color: colors.textMedium,
-  },
-  logButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  logButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "500",
   },
 });
