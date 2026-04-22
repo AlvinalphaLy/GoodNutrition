@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link, useRouter, type Href } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useProfile } from "../context/profileContext";
 
@@ -8,6 +8,8 @@ import { colors } from "../lib/colors";
 import { VoiceRecorder } from "../../src/features/voice-log/components/VoiceRecorder";
 import { useVoiceLog } from "../../src/features/voice-log/hooks/useVoiceLog";
 import { pendingVoiceStore } from "../../src/features/voice-log/store/pendingVoice";
+import { useMeals } from "./meals/meals-context";
+import { scoreMeal, gradeColor } from "./meals/eatScore";
 
 const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
   success: { bg: colors.successLight, text: colors.successText },
@@ -15,17 +17,18 @@ const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
   danger: { bg: colors.dangerLight, text: colors.dangerText },
 };
 
-type MealCardProps = {
-  mealType: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACKS";
-  calories: number;
-  time: string;
-  macros: { protein: number; carbs: number; fats: number };
-  tags: { label: string; variant: "success" | "warning" | "danger" }[];
-};
 
 type TagProps = {
   label: string;
   variant: "success" | "warning" | "danger";
+};
+
+type MealCardProps = {
+  mealType: string;
+  calories: number;
+  time: string;
+  macros: { protein: number; carbs: number; fats: number };
+  tags: TagProps[];
 };
 
 type CaloriesProps = {
@@ -54,14 +57,41 @@ type ProfileData = {
   fat: number;
 };
 
-type SummaryProps = {
-  profile: ProfileData;
-};
+type Totals = { calories: number; protein: number; carbs: number; fat: number };
 
 export default function Index() {
   const { profile } = useProfile();
+  const { loggedMeals } = useMeals();
   const router = useRouter();
   const { state, startVoice, stopVoice, reset } = useVoiceLog();
+
+  const todayKey = new Date().toDateString();
+
+  const todaysMeals = useMemo(
+    () => loggedMeals.filter((m) => new Date(m.loggedAt).toDateString() === todayKey),
+    [loggedMeals, todayKey]
+  );
+
+  const DEFAULT_TOTALS = { calories: 1500, protein: 120, carbs: 150, fat: 44 };
+  const DEFAULT_SCORE = 72;
+
+  const todaysTotals = useMemo(() => {
+    if (todaysMeals.length === 0) return DEFAULT_TOTALS;
+    const allItems = todaysMeals.flatMap((m) => m.items);
+    return {
+      calories: Math.round(allItems.reduce((s, i) => s + (i.calories ?? 0), 0)),
+      protein:  Math.round(allItems.reduce((s, i) => s + (i.protein  ?? 0), 0)),
+      carbs:    Math.round(allItems.reduce((s, i) => s + (i.carbs    ?? 0), 0)),
+      fat:      Math.round(allItems.reduce((s, i) => s + (i.fat      ?? 0), 0)),
+    };
+  }, [todaysMeals]);
+
+  const avgScore = useMemo(() => {
+    if (todaysMeals.length === 0) return DEFAULT_SCORE;
+    const scores = todaysMeals.map((m) => scoreMeal(m.items)).filter(Boolean);
+    if (scores.length === 0) return null;
+    return Math.round(scores.reduce((s, ms) => s + ms!.total, 0) / scores.length);
+  }, [todaysMeals]);
 
   useEffect(() => {
     if (state.status === "preview") {
@@ -73,23 +103,31 @@ export default function Index() {
 
   return (
     <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
-      <Summary profile={profile} />
+      <Summary profile={profile} totals={todaysTotals} avgScore={avgScore} />
       <LogMeal onMicPress={startVoice} />
-      <Meals />
+      <Meals meals={todaysMeals} />
       <VoiceRecorder state={state} onStop={stopVoice} onDismiss={reset} />
     </ScrollView>
   );
 }
 
-const Summary = ({ profile }: SummaryProps) => (
+const Summary = ({
+  profile,
+  totals,
+  avgScore,
+}: {
+  profile: ProfileData;
+  totals: { calories: number; protein: number; carbs: number; fat: number };
+  avgScore: number | null;
+}) => (
   <View>
     <Text style={styles.header}>Today&apos;s Summary</Text>
     <View>
       <View style={styles.subContainer}>
         <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
-          <Calories current={1500} goal={profile.calories} />
-          <Macros profile={profile} />
-          <Score rate={2} />
+          <Calories current={totals.calories} goal={profile.calories} />
+          <Macros totals={totals} profile={profile} />
+          <Score score={avgScore} />
         </View>
         <Separator />
         <HarmfulIngredientsSummary count={2} />
@@ -105,14 +143,19 @@ const HarmfulIngredientsSummary = ({ count }: { count: number }) => (
   </Pressable>
 );
 
-const Score = ({ rate }: { rate: number }) => (
-  <View>
-    <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
-    <View style={styles.circle}>
-      <Text style={styles.circleText}>{rate}/5</Text>
+const Score = ({ score }: { score: number | null }) => {
+  const color = score === null ? colors.danger : gradeColor(
+    score >= 80 ? "Excellent" : score >= 65 ? "Good" : score >= 50 ? "Fair" : "Poor"
+  );
+  return (
+    <View>
+      <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
+      <View style={[styles.circle, { backgroundColor: color }]}>
+        <Text style={styles.circleText}>{score ?? "--"}</Text>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const Calories = ({ current, goal }: CaloriesProps) => (
   <View>
@@ -122,13 +165,19 @@ const Calories = ({ current, goal }: CaloriesProps) => (
   </View>
 );
 
-const Macros = ({ profile }: SummaryProps) => (
+const Macros = ({
+  totals,
+  profile,
+}: {
+  totals: { protein: number; carbs: number; fat: number };
+  profile: ProfileData;
+}) => (
   <View>
     <Text style={styles.subHeader}>MACROS</Text>
     <View style={styles.macrosContainer}>
-      <MacroNutrient nutrient="Protein" current={120} goal={profile.protein} />
-      <MacroNutrient nutrient="Carbs" current={150} goal={profile.carb} />
-      <MacroNutrient nutrient="Fats" current={44} goal={profile.fat} />
+      <MacroNutrient nutrient="Protein" current={totals.protein} goal={profile.protein} />
+      <MacroNutrient nutrient="Carbs"   current={totals.carbs}   goal={profile.carb} />
+      <MacroNutrient nutrient="Fats"    current={totals.fat}     goal={profile.fat} />
     </View>
   </View>
 );
@@ -166,8 +215,7 @@ const LogButton = ({ name, path, onPress }: LogButtonProps) => {
   );
 };
 
-// Dummy Data
-const meals: MealCardProps[] = [
+const DEFAULT_MEALS: MealCardProps[] = [
   {
     mealType: "BREAKFAST",
     calories: 450,
@@ -183,26 +231,21 @@ const meals: MealCardProps[] = [
     tags: [{ label: "Moderate sodium", variant: "warning" }],
   },
 ];
-const Meals = () => (
+
+const Meals = ({ meals }: { meals: ReturnType<typeof useMeals>["loggedMeals"] }) => (
   <View>
     <Text style={styles.header}>Today&apos;s Meals</Text>
     <View>
       {meals.length === 0 ? (
-        <Text style={styles.emptyState}>No meals logged yet today.</Text>
+        DEFAULT_MEALS.map((meal) => <DefaultMealCard key={meal.mealType} {...meal} />)
       ) : (
-        meals.map((meal) => <MealCard key={meal.mealType} {...meal} />)
+        meals.map((meal) => <MealCard key={meal.id} meal={meal} />)
       )}
     </View>
   </View>
 );
 
-const MealCard = ({
-  mealType,
-  calories,
-  time,
-  macros,
-  tags,
-}: MealCardProps) => (
+const DefaultMealCard = ({ mealType, calories, time, macros, tags }: MealCardProps) => (
   <View>
     <Text style={styles.mealTypeLabel}>{mealType}</Text>
     <View style={styles.subContainer}>
@@ -222,21 +265,61 @@ const MealCard = ({
         <Text style={styles.mealMacroValue}>
           {macros.fats}g <Text style={styles.mealMacroLabel}>fats</Text>
         </Text>
-        <Ionicons
-          name="chevron-forward"
-          size={24}
-          color={colors.textMedium}
-          style={{ marginLeft: "auto" }}
-        />
+        <Ionicons name="chevron-forward" size={24} color={colors.textMedium} style={{ marginLeft: "auto" }} />
       </View>
       <View style={styles.tagsRow}>
-        {tags.map((tag, i) => (
-          <Tag key={i} label={tag.label} variant={tag.variant} />
-        ))}
+        {tags.map((tag, i) => <Tag key={i} label={tag.label} variant={tag.variant} />)}
       </View>
     </View>
   </View>
 );
+
+const MealCard = ({ meal }: { meal: ReturnType<typeof useMeals>["loggedMeals"][number] }) => {
+  const calories = meal.items.reduce((s, i) => s + (i.calories ?? 0), 0);
+  const protein  = Math.round(meal.items.reduce((s, i) => s + (i.protein  ?? 0), 0));
+  const carbs    = Math.round(meal.items.reduce((s, i) => s + (i.carbs    ?? 0), 0));
+  const fat      = Math.round(meal.items.reduce((s, i) => s + (i.fat      ?? 0), 0));
+  const ms       = scoreMeal(meal.items);
+  const time     = new Date(meal.loggedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const gradeTag: TagProps | null = ms
+    ? {
+        label: ms.grade,
+        variant: ms.total >= 65 ? "success" : ms.total >= 50 ? "warning" : "danger",
+      }
+    : null;
+
+  return (
+    <View>
+      <Text style={styles.mealTypeLabel}>{meal.mealType.toUpperCase()}</Text>
+      <View style={styles.subContainer}>
+        <View style={styles.mealTopRow}>
+          <Text style={styles.mealCalories}>
+            {Math.round(calories)} <Text style={styles.mealKcal}>kcal</Text>
+          </Text>
+          <Text style={styles.mealTime}>{time}</Text>
+        </View>
+        <View style={styles.mealMacrosRow}>
+          <Text style={styles.mealMacroValue}>
+            {protein}g <Text style={styles.mealMacroLabel}>protein</Text>
+          </Text>
+          <Text style={styles.mealMacroValue}>
+            {carbs}g <Text style={styles.mealMacroLabel}>carbs</Text>
+          </Text>
+          <Text style={styles.mealMacroValue}>
+            {fat}g <Text style={styles.mealMacroLabel}>fats</Text>
+          </Text>
+          <Ionicons name="chevron-forward" size={24} color={colors.textMedium} style={{ marginLeft: "auto" }} />
+        </View>
+        {gradeTag && (
+          <View style={styles.tagsRow}>
+            <Tag label={gradeTag.label} variant={gradeTag.variant} />
+          </View>
+        )}
+      </View>
+    </View>
+  );
+};
 
 const Tag = ({ label, variant }: TagProps) => (
   <View style={[styles.tag, { backgroundColor: TAG_COLORS[variant].bg }]}>

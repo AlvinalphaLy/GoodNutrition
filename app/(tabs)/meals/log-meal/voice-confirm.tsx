@@ -41,6 +41,10 @@ export default function VoiceConfirmScreen() {
         quantity: String(item.quantity),
         unit: item.unit ?? "serving",
         entryKind: "single",
+        calories: item.nutrition?.calories,
+        protein:  item.nutrition?.protein,
+        carbs:    item.nutrition?.carbs,
+        fat:      item.nutrition?.fat,
       })
     );
 

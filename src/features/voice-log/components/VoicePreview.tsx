@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 
-import type { ParsedVoiceResult } from "../types/voice";
+import type { NutritionInfo, ParsedVoiceResult } from "../types/voice";
 
 type Props = {
   result: ParsedVoiceResult;
@@ -16,8 +16,23 @@ type Props = {
   onDismiss: () => void;
 };
 
+function sumNutrition(items: ParsedVoiceResult["items"]): NutritionInfo | null {
+  const withNutrition = items.filter((i) => i.nutrition);
+  if (withNutrition.length === 0) return null;
+  return withNutrition.reduce(
+    (acc, item) => ({
+      calories: acc.calories + (item.nutrition?.calories ?? 0),
+      protein:  acc.protein  + (item.nutrition?.protein  ?? 0),
+      carbs:    acc.carbs    + (item.nutrition?.carbs    ?? 0),
+      fat:      acc.fat      + (item.nutrition?.fat      ?? 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+}
+
 export function VoicePreview({ result, onConfirm, onDismiss }: Props) {
   const hasItems = result.items.length > 0;
+  const total = sumNutrition(result.items);
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onDismiss}>
@@ -36,19 +51,41 @@ export function VoicePreview({ result, onConfirm, onDismiss }: Props) {
           <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
             {result.items.map((item, idx) => (
               <View key={idx} style={styles.itemRow}>
-                <Text style={styles.itemQty}>
-                  {item.quantity}
-                  {item.unit ? ` ${item.unit}` : ""}
-                </Text>
-                <Text style={styles.itemName}>{item.name}</Text>
+                <View style={styles.itemLeft}>
+                  <Text style={styles.itemQty}>
+                    {item.quantity}
+                    {item.unit ? ` ${item.unit}` : ""}
+                  </Text>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                </View>
+                {item.nutrition ? (
+                  <Text style={styles.macroLine}>
+                    {item.nutrition.calories} kcal{"  "}
+                    P {item.nutrition.protein}g{"  "}
+                    C {item.nutrition.carbs}g{"  "}
+                    F {item.nutrition.fat}g
+                  </Text>
+                ) : (
+                  <Text style={styles.macroUnknown}>nutrition unavailable</Text>
+                )}
               </View>
             ))}
           </ScrollView>
 
           {!hasItems && (
-            <Text style={styles.empty}>
-              No items detected. Please try again.
-            </Text>
+            <Text style={styles.empty}>No items detected. Please try again.</Text>
+          )}
+
+          {total && result.items.length > 1 && (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalValues}>
+                {total.calories} kcal{"  "}
+                P {Math.round(total.protein * 10) / 10}g{"  "}
+                C {Math.round(total.carbs * 10) / 10}g{"  "}
+                F {Math.round(total.fat * 10) / 10}g
+              </Text>
+            </View>
           )}
 
           <Text style={styles.rawLabel}>Heard: "{result.rawText}"</Text>
@@ -58,10 +95,7 @@ export function VoicePreview({ result, onConfirm, onDismiss }: Props) {
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
             <Pressable
-              style={[
-                styles.confirmButton,
-                !hasItems && styles.confirmDisabled,
-              ]}
+              style={[styles.confirmButton, !hasItems && styles.confirmDisabled]}
               onPress={() => onConfirm(result)}
               disabled={!hasItems}
             >
@@ -106,15 +140,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   list: {
-    maxHeight: 200,
+    maxHeight: 240,
   },
   itemRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    gap: 3,
+  },
+  itemLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
   },
   itemQty: {
     fontSize: 15,
@@ -126,6 +163,36 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#111827",
     textTransform: "capitalize",
+  },
+  macroLine: {
+    fontSize: 12,
+    color: "#6B7280",
+    paddingLeft: 2,
+  },
+  macroUnknown: {
+    fontSize: 12,
+    color: "#D1D5DB",
+    fontStyle: "italic",
+    paddingLeft: 2,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#F0FDF4",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  totalLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#065F46",
+  },
+  totalValues: {
+    fontSize: 12,
+    color: "#065F46",
+    fontWeight: "600",
   },
   empty: {
     fontSize: 14,

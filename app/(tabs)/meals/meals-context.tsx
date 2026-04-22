@@ -25,6 +25,10 @@ export type MealDraftItem = {
   nestedItems?: NestedMealItem[];
   mealSourceType?: MealSourceType;
   mealSourceId?: string | null;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
 };
 
 type MealLogMode = "single" | "meal";

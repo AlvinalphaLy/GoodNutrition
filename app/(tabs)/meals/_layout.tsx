@@ -1,10 +1,7 @@
 import { Stack } from "expo-router";
 
-import { MealsProvider } from "./meals-context";
-
 export default function MealsLayout() {
   return (
-    <MealsProvider>
       <Stack>
         <Stack.Screen name="index" options={{ title: "Meals" }} />
         <Stack.Screen name="log-meal/meal-type" options={{ title: "Select Meal Type" }} />
@@ -20,6 +17,5 @@ export default function MealsLayout() {
         <Stack.Screen name="recipes/quantity-unit" options={{ title: "Quantity / Unit" }} />
         <Stack.Screen name="recipes/review" options={{ title: "Review Recipe" }} />
       </Stack>
-    </MealsProvider>
   );
 }

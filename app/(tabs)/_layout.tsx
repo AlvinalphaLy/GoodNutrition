@@ -2,12 +2,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Tabs } from "expo-router";
 import { ProfileProvider } from "../context/profileContext";
+import { MealsProvider } from "./meals/meals-context";
 
 import { colors } from "../lib/colors";
 
 export default function TabLayout() {
   return (
     <ProfileProvider>
+      <MealsProvider>
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
@@ -84,6 +86,7 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
+      </MealsProvider>
     </ProfileProvider>
   );
 }

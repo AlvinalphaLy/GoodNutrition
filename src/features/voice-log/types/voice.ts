@@ -1,9 +1,17 @@
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack" | null;
 
+export type NutritionInfo = {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
 export type VoiceItem = {
   name: string;
   quantity: number;
   unit: string | null;
+  nutrition?: NutritionInfo;
 };
 
 export type ParsedVoiceResult = {
