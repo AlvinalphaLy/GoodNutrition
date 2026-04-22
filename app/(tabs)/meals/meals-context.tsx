@@ -8,12 +8,30 @@ import {
 } from "react";
 
 import { presetFoodItems, type PresetFoodItem } from "./meals-data";
+import {
+  cloneNutrition,
+  divideNutrition,
+  formatCalories,
+  formatMacrosLine,
+  rescaleNutrition,
+  scaleNutritionReference,
+  summarizeNutritionEntries,
+  type NutritionInfo,
+} from "./nutrition";
 
-type NestedMealItem = {
+type ItemSourceType = "manual" | "off" | "recipe";
+type MealLogMode = "single" | "meal";
+type MealSourceType = "none" | "recipe" | "loggedMeal" | "custom";
+
+export type NestedMealItem = {
   id: string;
   name: string;
   quantity: string;
   unit: string;
+  brand?: string;
+  sourceType?: ItemSourceType;
+  offProductCode?: string | null;
+  nutrition?: NutritionInfo | null;
 };
 
 export type MealDraftItem = {
@@ -21,14 +39,15 @@ export type MealDraftItem = {
   name: string;
   quantity: string;
   unit: string;
+  brand?: string;
   entryKind?: "single" | "meal";
   nestedItems?: NestedMealItem[];
   mealSourceType?: MealSourceType;
   mealSourceId?: string | null;
+  sourceType?: ItemSourceType;
+  offProductCode?: string | null;
+  nutrition?: NutritionInfo | null;
 };
-
-type MealLogMode = "single" | "meal";
-type MealSourceType = "none" | "recipe" | "loggedMeal" | "custom";
 
 export type LoggedMeal = {
   id: string;
@@ -51,6 +70,7 @@ export type RecipeIngredient = {
   brand?: string;
   notes?: string;
   source: "search" | "custom";
+  nutrition?: NutritionInfo | null;
 };
 
 export type SavedRecipe = {
@@ -123,7 +143,10 @@ type MealsContextValue = {
   deleteRecipe: (id: string) => void;
   setPendingRecipeIngredient: (ingredient: PendingRecipeIngredient) => void;
   addRecipeIngredient: (ingredient: Omit<RecipeIngredient, "id">) => void;
-  updateRecipeIngredient: (id: string, updates: Partial<Pick<RecipeIngredient, "quantity" | "unit" | "name">>) => void;
+  updateRecipeIngredient: (
+    id: string,
+    updates: Partial<Pick<RecipeIngredient, "quantity" | "unit" | "name">>
+  ) => void;
   removeRecipeIngredient: (id: string) => void;
   saveRecipeDraft: () => void;
 };
@@ -149,77 +172,136 @@ const emptyRecipeDraft: RecipeDraft = {
   ingredients: [],
 };
 
+const normalizeEntryName = (value: string) => value.trim().toLowerCase();
+
 const cloneNestedMealItems = (items?: NestedMealItem[]) =>
-  items?.map((item) => ({ ...item })) ?? [];
+  items?.map((item) => ({
+    ...item,
+    nutrition: cloneNutrition(item.nutrition),
+  })) ?? [];
 
 const cloneMealItems = (items: MealDraftItem[]) =>
   items.map((item) => ({
     ...item,
+    nutrition: cloneNutrition(item.nutrition),
     nestedItems: cloneNestedMealItems(item.nestedItems),
   }));
 
 const cloneRecipeIngredients = (ingredients: RecipeIngredient[]) =>
-  ingredients.map((ingredient) => ({ ...ingredient }));
+  ingredients.map((ingredient) => ({
+    ...ingredient,
+    nutrition: cloneNutrition(ingredient.nutrition),
+  }));
 
-const normalizeEntryName = (value: string) => value.trim().toLowerCase();
+const getPresetFoodByName = (foods: PresetFoodItem[], name: string) => {
+  const normalizedName = normalizeEntryName(name);
+  return foods.find((food) => {
+    const aliases = food.aliases?.map((alias) => normalizeEntryName(alias)) ?? [];
+    return normalizeEntryName(food.name) === normalizedName || aliases.includes(normalizedName);
+  });
+};
 
-const buildRecipeSummary = (ingredientCount: number) => ({
-  caloriesPerServing: `${320 + ingredientCount * 45} kcal`,
-  macrosPerServing: `${18 + ingredientCount * 4}g protein • ${22 + ingredientCount * 5}g carbs • ${7 + ingredientCount * 2}g fat`,
-  summary: `${ingredientCount} ingredient${ingredientCount === 1 ? "" : "s"} in this UI-only recipe draft.`,
+const getIngredientNutrition = (
+  foods: PresetFoodItem[],
+  ingredient: Pick<RecipeIngredient, "name" | "quantity" | "nutrition">
+) => {
+  if (ingredient.nutrition) {
+    return ingredient.nutrition;
+  }
+
+  const matchingFood = getPresetFoodByName(foods, ingredient.name);
+  return scaleNutritionReference(matchingFood?.nutritionPerSuggestedUnit, ingredient.quantity);
+};
+
+const buildRecipeSummary = (
+  ingredients: RecipeIngredient[],
+  servings: string,
+  foods: PresetFoodItem[]
+) => {
+  const totals = summarizeNutritionEntries(
+    ingredients.map((ingredient) => ({
+      nutrition: getIngredientNutrition(foods, ingredient),
+    }))
+  );
+  const servingCount = Number.isFinite(Number(servings)) && Number(servings) > 0 ? Number(servings) : 1;
+  const perServingNutrition = divideNutrition(totals, servingCount);
+  const harmfulCount = perServingNutrition.harmfulIngredientMatches.length;
+
+  return {
+    caloriesPerServing: formatCalories(perServingNutrition.calories),
+    macrosPerServing: formatMacrosLine(perServingNutrition),
+    summary:
+      harmfulCount > 0
+        ? `${ingredients.length} ingredient${ingredients.length === 1 ? "" : "s"} • ${harmfulCount} flagged ingredient${harmfulCount === 1 ? "" : "s"}`
+        : `${ingredients.length} ingredient${ingredients.length === 1 ? "" : "s"} with estimated nutrition per serving.`,
+  };
+};
+
+const createInitialIngredient = (
+  name: string,
+  quantity: string,
+  unit: string,
+  foods: PresetFoodItem[]
+): RecipeIngredient => ({
+  id: createId(),
+  name,
+  quantity,
+  unit,
+  source: "search",
+  nutrition: scaleNutritionReference(getPresetFoodByName(foods, name)?.nutritionPerSuggestedUnit, quantity),
 });
 
-const initialSavedRecipes: SavedRecipe[] = [
-  {
-    id: "recipe-1",
-    name: "High Protein Oatmeal",
-    servings: "2",
-    caloriesPerServing: "390 kcal",
-    macrosPerServing: "28g protein • 47g carbs • 9g fat",
-    summary: "A balanced breakfast bowl with oats, yogurt, and berries.",
-    ingredients: [
-      { id: "recipe-1-1", name: "Rolled oats", quantity: "1", unit: "cup", source: "search" },
-      { id: "recipe-1-2", name: "Greek yogurt", quantity: "1", unit: "cup", source: "search" },
-      { id: "recipe-1-3", name: "Blueberries", quantity: "1/2", unit: "cup", source: "search" },
-    ],
-  },
-  {
-    id: "recipe-2",
-    name: "Chicken Rice Bowl",
-    servings: "1",
-    caloriesPerServing: "520 kcal",
-    macrosPerServing: "41g protein • 49g carbs • 14g fat",
-    summary: "Simple bowl with lean protein, rice, and veggies.",
-    ingredients: [
-      { id: "recipe-2-1", name: "Chicken breast", quantity: "1", unit: "serving", source: "search" },
-      { id: "recipe-2-2", name: "White rice", quantity: "1", unit: "cup", source: "search" },
-      { id: "recipe-2-3", name: "Bell pepper", quantity: "1/2", unit: "cup", source: "search" },
-    ],
-  },
-  {
-    id: "recipe-3",
-    name: "Greek Yogurt Fruit Bowl",
-    servings: "1",
-    caloriesPerServing: "310 kcal",
-    macrosPerServing: "23g protein • 36g carbs • 7g fat",
-    summary: "Quick snack recipe with yogurt, fruit, and granola.",
-    ingredients: [
-      { id: "recipe-3-1", name: "Greek yogurt", quantity: "1", unit: "serving", source: "search" },
-      { id: "recipe-3-2", name: "Strawberries", quantity: "1/2", unit: "cup", source: "search" },
-      { id: "recipe-3-3", name: "Granola", quantity: "1/4", unit: "cup", source: "search" },
-    ],
-  },
-];
+const buildInitialSavedRecipes = (foods: PresetFoodItem[]): SavedRecipe[] => {
+  const recipes = [
+    {
+      id: "recipe-1",
+      name: "High Protein Oatmeal",
+      servings: "2",
+      ingredients: [
+        createInitialIngredient("Rolled oats", "1", "cup", foods),
+        createInitialIngredient("Greek yogurt", "1", "cup", foods),
+        createInitialIngredient("Blueberries", "1/2", "cup", foods),
+      ],
+    },
+    {
+      id: "recipe-2",
+      name: "Chicken Rice Bowl",
+      servings: "1",
+      ingredients: [
+        createInitialIngredient("Chicken breast", "4", "oz", foods),
+        createInitialIngredient("White rice", "1", "cup", foods),
+        createInitialIngredient("Bell pepper", "1/2", "cup", foods),
+      ],
+    },
+    {
+      id: "recipe-3",
+      name: "Greek Yogurt Fruit Bowl",
+      servings: "1",
+      ingredients: [
+        createInitialIngredient("Greek yogurt", "1", "cup", foods),
+        createInitialIngredient("Strawberries", "1/2", "cup", foods),
+        createInitialIngredient("Granola", "1/4", "cup", foods),
+      ],
+    },
+  ];
+
+  return recipes.map((recipe) => ({
+    ...recipe,
+    ...buildRecipeSummary(recipe.ingredients, recipe.servings, foods),
+  }));
+};
 
 export function MealsProvider({ children }: PropsWithChildren) {
   const [mealDraft, setMealDraft] = useState<MealDraft>(emptyMealDraft);
   const [recipeDraft, setRecipeDraft] = useState<RecipeDraft>(emptyRecipeDraft);
   const [pendingRecipeIngredient, setPendingRecipeIngredient] = useState<PendingRecipeIngredient>(null);
   const [loggedMeals, setLoggedMeals] = useState<LoggedMeal[]>([]);
-  const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>(initialSavedRecipes);
+  const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>(() => buildInitialSavedRecipes(presetFoodItems));
   const [customFoods, setCustomFoods] = useState<PresetFoodItem[]>([]);
   const [editingLoggedMealId, setEditingLoggedMealId] = useState<string | null>(null);
   const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
+
+  const availableFoods = useMemo(() => [...customFoods, ...presetFoodItems], [customFoods]);
 
   const beginNewMealDraft = useCallback(() => {
     setEditingLoggedMealId(null);
@@ -311,29 +393,85 @@ export function MealsProvider({ children }: PropsWithChildren) {
     [loggedMeals]
   );
 
-  const addMealItem = useCallback((item: Omit<MealDraftItem, "id">) => {
-    setMealDraft((prev) => ({
-      ...prev,
-      items: [...prev.items, { ...item, id: createId(), entryKind: item.entryKind ?? "single" }],
-    }));
-  }, []);
+  const addMealItem = useCallback(
+    (item: Omit<MealDraftItem, "id">) => {
+      const estimatedNestedItems = item.nestedItems?.map((nestedItem) => ({
+        ...nestedItem,
+        nutrition:
+          nestedItem.nutrition ??
+          scaleNutritionReference(
+            getPresetFoodByName(availableFoods, nestedItem.name)?.nutritionPerSuggestedUnit,
+            nestedItem.quantity,
+            nestedItem.nutrition?.ingredientsText ?? null,
+            nestedItem.nutrition?.harmfulIngredientMatches ?? []
+          ),
+      }));
 
-  const updateMealItem = useCallback((
-    id: string,
-    updates: Partial<Pick<MealDraftItem, "quantity" | "unit" | "name">>
-  ) => {
-    setMealDraft((prev) => ({
-      ...prev,
-      items: prev.items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              ...updates,
-            }
-          : item
-      ),
-    }));
-  }, []);
+      const estimatedNutrition =
+        item.nutrition ??
+        (estimatedNestedItems?.length
+          ? summarizeNutritionEntries(estimatedNestedItems)
+          : scaleNutritionReference(
+              getPresetFoodByName(availableFoods, item.name)?.nutritionPerSuggestedUnit,
+              item.quantity,
+              item.nutrition?.ingredientsText ?? null,
+              item.nutrition?.harmfulIngredientMatches ?? []
+            ));
+
+      setMealDraft((prev) => ({
+        ...prev,
+        items: [
+          ...prev.items,
+          {
+            ...item,
+            id: createId(),
+            entryKind: item.entryKind ?? "single",
+            nutrition: cloneNutrition(estimatedNutrition),
+            nestedItems: cloneNestedMealItems(estimatedNestedItems),
+          },
+        ],
+      }));
+    },
+    [availableFoods]
+  );
+
+  const updateMealItem = useCallback(
+    (id: string, updates: Partial<Pick<MealDraftItem, "quantity" | "unit" | "name">>) => {
+      setMealDraft((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => {
+          if (item.id !== id) return item;
+
+          const updatedItem = {
+            ...item,
+            ...updates,
+          };
+
+          if (item.entryKind === "meal" && item.nestedItems?.length) {
+            const baseNutrition = item.nutrition ?? summarizeNutritionEntries(item.nestedItems);
+            updatedItem.nutrition = rescaleNutrition(baseNutrition, item.quantity, updatedItem.quantity);
+            return updatedItem;
+          }
+
+          if (item.sourceType === "manual" || !item.sourceType) {
+            const matchingFood = getPresetFoodByName(availableFoods, updatedItem.name);
+            updatedItem.nutrition =
+              scaleNutritionReference(
+                matchingFood?.nutritionPerSuggestedUnit,
+                updatedItem.quantity,
+                item.nutrition?.ingredientsText ?? null,
+                item.nutrition?.harmfulIngredientMatches ?? []
+              ) ?? rescaleNutrition(item.nutrition, item.quantity, updatedItem.quantity);
+            return updatedItem;
+          }
+
+          updatedItem.nutrition = rescaleNutrition(item.nutrition, item.quantity, updatedItem.quantity);
+          return updatedItem;
+        }),
+      }));
+    },
+    [availableFoods]
+  );
 
   const removeMealItem = useCallback((id: string) => {
     setMealDraft((prev) => ({
@@ -342,103 +480,114 @@ export function MealsProvider({ children }: PropsWithChildren) {
     }));
   }, []);
 
-  const saveCustomFood = useCallback((name: string, suggestedUnit = "serving") => {
-    const trimmedName = name.trim();
-    const normalizedName = normalizeEntryName(trimmedName);
+  const saveCustomFood = useCallback(
+    (name: string, suggestedUnit = "serving") => {
+      const trimmedName = name.trim();
+      const normalizedName = normalizeEntryName(trimmedName);
 
-    const existingCustom = customFoods.find((item) => normalizeEntryName(item.name) === normalizedName);
-    if (existingCustom) {
-      const updatedItem = {
-        ...existingCustom,
-        suggestedUnit: suggestedUnit.trim() || existingCustom.suggestedUnit || "serving",
+      const existingCustom = customFoods.find((item) => normalizeEntryName(item.name) === normalizedName);
+      if (existingCustom) {
+        const updatedItem = {
+          ...existingCustom,
+          suggestedUnit: suggestedUnit.trim() || existingCustom.suggestedUnit || "serving",
+        };
+        setCustomFoods((current) =>
+          current.map((item) => (item.id === existingCustom.id ? updatedItem : item))
+        );
+        return updatedItem;
+      }
+
+      const existingSystem = presetFoodItems.find((item) => normalizeEntryName(item.name) === normalizedName);
+      if (existingSystem) {
+        return existingSystem;
+      }
+
+      const newItem: PresetFoodItem = {
+        id: createId(),
+        name: trimmedName,
+        suggestedUnit: suggestedUnit.trim() || "serving",
+        source: "custom",
       };
+
+      setCustomFoods((current) => [newItem, ...current]);
+      return newItem;
+    },
+    [customFoods]
+  );
+
+  const updateCustomFood = useCallback(
+    (id: string, name: string, suggestedUnit: string) => {
+      const trimmedName = name.trim();
+      const trimmedUnit = suggestedUnit.trim() || "serving";
+      const existingCustom = customFoods.find((item) => item.id === id);
+      if (!trimmedName || !existingCustom) return;
+
       setCustomFoods((current) =>
-        current.map((item) => (item.id === existingCustom.id ? updatedItem : item))
+        current.map((item) =>
+          item.id === id ? { ...item, name: trimmedName, suggestedUnit: trimmedUnit } : item
+        )
       );
-      return updatedItem;
-    }
 
-    const existingSystem = presetFoodItems.find((item) => normalizeEntryName(item.name) === normalizedName);
-    if (existingSystem) {
-      return existingSystem;
-    }
-
-    const newItem: PresetFoodItem = {
-      id: createId(),
-      name: trimmedName,
-      suggestedUnit: suggestedUnit.trim() || "serving",
-      source: "custom",
-    };
-
-    setCustomFoods((current) => [newItem, ...current]);
-    return newItem;
-  }, [customFoods]);
-
-  const updateCustomFood = useCallback((id: string, name: string, suggestedUnit: string) => {
-    const trimmedName = name.trim();
-    const trimmedUnit = suggestedUnit.trim() || "serving";
-    const existingCustom = customFoods.find((item) => item.id === id);
-    if (!trimmedName || !existingCustom) return;
-
-    setCustomFoods((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, name: trimmedName, suggestedUnit: trimmedUnit } : item
-      )
-    );
-
-    setMealDraft((prev) => ({
-      ...prev,
-      items: prev.items.map((item) => ({
-        ...item,
-        name: normalizeEntryName(item.name) === normalizeEntryName(existingCustom.name)
-          ? trimmedName
-          : item.name,
-        unit: normalizeEntryName(item.name) === normalizeEntryName(existingCustom.name) && !item.unit
-          ? trimmedUnit
-          : item.unit,
-        nestedItems: item.nestedItems?.map((nestedItem) =>
-          normalizeEntryName(nestedItem.name) === normalizeEntryName(existingCustom.name)
-            ? { ...nestedItem, name: trimmedName, unit: nestedItem.unit || trimmedUnit }
-            : nestedItem
-        ),
-      })),
-    }));
-
-    setRecipeDraft((prev) => ({
-      ...prev,
-      ingredients: prev.ingredients.map((ingredient) =>
-        normalizeEntryName(ingredient.name) === normalizeEntryName(existingCustom.name)
-          ? { ...ingredient, name: trimmedName, unit: ingredient.unit || trimmedUnit }
-          : ingredient
-      ),
-    }));
-  }, [customFoods]);
-
-  const removeCustomFood = useCallback((id: string) => {
-    const customItem = customFoods.find((item) => item.id === id);
-    setCustomFoods((current) => current.filter((item) => item.id !== id));
-
-    if (!customItem) return;
-
-    setMealDraft((prev) => ({
-      ...prev,
-      items: prev.items
-        .filter((item) => normalizeEntryName(item.name) !== normalizeEntryName(customItem.name))
-        .map((item) => ({
+      setMealDraft((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => ({
           ...item,
-          nestedItems: item.nestedItems?.filter(
-            (nestedItem) => normalizeEntryName(nestedItem.name) !== normalizeEntryName(customItem.name)
+          name:
+            normalizeEntryName(item.name) === normalizeEntryName(existingCustom.name)
+              ? trimmedName
+              : item.name,
+          unit:
+            normalizeEntryName(item.name) === normalizeEntryName(existingCustom.name) && !item.unit
+              ? trimmedUnit
+              : item.unit,
+          nestedItems: item.nestedItems?.map((nestedItem) =>
+            normalizeEntryName(nestedItem.name) === normalizeEntryName(existingCustom.name)
+              ? { ...nestedItem, name: trimmedName, unit: nestedItem.unit || trimmedUnit }
+              : nestedItem
           ),
         })),
-    }));
+      }));
 
-    setRecipeDraft((prev) => ({
-      ...prev,
-      ingredients: prev.ingredients.filter(
-        (ingredient) => normalizeEntryName(ingredient.name) !== normalizeEntryName(customItem.name)
-      ),
-    }));
-  }, [customFoods]);
+      setRecipeDraft((prev) => ({
+        ...prev,
+        ingredients: prev.ingredients.map((ingredient) =>
+          normalizeEntryName(ingredient.name) === normalizeEntryName(existingCustom.name)
+            ? { ...ingredient, name: trimmedName, unit: ingredient.unit || trimmedUnit }
+            : ingredient
+        ),
+      }));
+    },
+    [customFoods]
+  );
+
+  const removeCustomFood = useCallback(
+    (id: string) => {
+      const customItem = customFoods.find((item) => item.id === id);
+      setCustomFoods((current) => current.filter((item) => item.id !== id));
+
+      if (!customItem) return;
+
+      setMealDraft((prev) => ({
+        ...prev,
+        items: prev.items
+          .filter((item) => normalizeEntryName(item.name) !== normalizeEntryName(customItem.name))
+          .map((item) => ({
+            ...item,
+            nestedItems: item.nestedItems?.filter(
+              (nestedItem) => normalizeEntryName(nestedItem.name) !== normalizeEntryName(customItem.name)
+            ),
+          })),
+      }));
+
+      setRecipeDraft((prev) => ({
+        ...prev,
+        ingredients: prev.ingredients.filter(
+          (ingredient) => normalizeEntryName(ingredient.name) !== normalizeEntryName(customItem.name)
+        ),
+      }));
+    },
+    [customFoods]
+  );
 
   const deleteLoggedMeal = useCallback(
     (id: string) => {
@@ -459,7 +608,10 @@ export function MealsProvider({ children }: PropsWithChildren) {
       ? loggedMeals.find((meal) => meal.id === editingLoggedMealId)
       : undefined;
 
-    const fallbackSingleName = mealDraft.items.length === 1 ? mealDraft.items[0]?.name ?? "Item Entry" : `${mealDraft.mealType || "Meal"} Log`;
+    const fallbackSingleName =
+      mealDraft.items.length === 1
+        ? mealDraft.items[0]?.name ?? "Item Entry"
+        : `${mealDraft.mealType || "Meal"} Log`;
     const normalizedMealName = mealDraft.mealName.trim() || existingMeal?.mealName || fallbackSingleName;
 
     const normalizedMeal: LoggedMeal = {
@@ -470,7 +622,10 @@ export function MealsProvider({ children }: PropsWithChildren) {
       mealName: normalizedMealName,
       items: cloneMealItems(mealDraft.items),
       loggedAt: existingMeal?.loggedAt ?? new Date().toISOString(),
-      servingsLogged: mealDraft.logMode === "meal" ? mealDraft.servingsLogged.trim() || existingMeal?.servingsLogged || "1" : "1",
+      servingsLogged:
+        mealDraft.logMode === "meal"
+          ? mealDraft.servingsLogged.trim() || existingMeal?.servingsLogged || "1"
+          : "1",
       mealSourceType: mealDraft.logMode === "meal" ? mealDraft.mealSourceType : "none",
       mealSourceId: mealDraft.logMode === "meal" ? mealDraft.mealSourceId : null,
     };
@@ -480,9 +635,7 @@ export function MealsProvider({ children }: PropsWithChildren) {
         return [normalizedMeal, ...current];
       }
 
-      return current.map((meal) =>
-        meal.id === editingLoggedMealId ? normalizedMeal : meal
-      );
+      return current.map((meal) => (meal.id === editingLoggedMealId ? normalizedMeal : meal));
     });
 
     setEditingLoggedMealId(null);
@@ -532,22 +685,57 @@ export function MealsProvider({ children }: PropsWithChildren) {
     [editingRecipeId]
   );
 
-  const addRecipeIngredient = useCallback((ingredient: Omit<RecipeIngredient, "id">) => {
-    setRecipeDraft((prev) => ({
-      ...prev,
-      ingredients: [...prev.ingredients, { ...ingredient, id: createId() }],
-    }));
-    setPendingRecipeIngredient(null);
-  }, []);
+  const addRecipeIngredient = useCallback(
+    (ingredient: Omit<RecipeIngredient, "id">) => {
+      const estimatedNutrition =
+        ingredient.nutrition ??
+        scaleNutritionReference(
+          getPresetFoodByName(availableFoods, ingredient.name)?.nutritionPerSuggestedUnit,
+          ingredient.quantity
+        );
 
-  const updateRecipeIngredient = useCallback((id: string, updates: Partial<Pick<RecipeIngredient, "quantity" | "unit" | "name">>) => {
-    setRecipeDraft((prev) => ({
-      ...prev,
-      ingredients: prev.ingredients.map((ingredient) =>
-        ingredient.id === id ? { ...ingredient, ...updates } : ingredient
-      ),
-    }));
-  }, []);
+      setRecipeDraft((prev) => ({
+        ...prev,
+        ingredients: [
+          ...prev.ingredients,
+          {
+            ...ingredient,
+            id: createId(),
+            nutrition: cloneNutrition(estimatedNutrition),
+          },
+        ],
+      }));
+      setPendingRecipeIngredient(null);
+    },
+    [availableFoods]
+  );
+
+  const updateRecipeIngredient = useCallback(
+    (id: string, updates: Partial<Pick<RecipeIngredient, "quantity" | "unit" | "name">>) => {
+      setRecipeDraft((prev) => ({
+        ...prev,
+        ingredients: prev.ingredients.map((ingredient) => {
+          if (ingredient.id !== id) return ingredient;
+
+          const updatedIngredient = {
+            ...ingredient,
+            ...updates,
+          };
+
+          const matchingFood = getPresetFoodByName(availableFoods, updatedIngredient.name);
+          return {
+            ...updatedIngredient,
+            nutrition:
+              ingredient.source === "search"
+                ? scaleNutritionReference(matchingFood?.nutritionPerSuggestedUnit, updatedIngredient.quantity)
+                  ?? rescaleNutrition(ingredient.nutrition, ingredient.quantity, updatedIngredient.quantity)
+                : ingredient.nutrition,
+          };
+        }),
+      }));
+    },
+    [availableFoods]
+  );
 
   const removeRecipeIngredient = useCallback((id: string) => {
     setRecipeDraft((prev) => ({
@@ -559,12 +747,17 @@ export function MealsProvider({ children }: PropsWithChildren) {
   const saveRecipeDraft = useCallback(() => {
     if (!recipeDraft.name.trim() || recipeDraft.ingredients.length === 0) return;
 
+    const normalizedIngredients = cloneRecipeIngredients(recipeDraft.ingredients).map((ingredient) => ({
+      ...ingredient,
+      nutrition: getIngredientNutrition(availableFoods, ingredient),
+    }));
+
     const normalizedRecipe: SavedRecipe = {
       id: editingRecipeId ?? createId(),
       name: recipeDraft.name.trim(),
       servings: recipeDraft.servings.trim() || "1",
-      ingredients: cloneRecipeIngredients(recipeDraft.ingredients),
-      ...buildRecipeSummary(recipeDraft.ingredients.length),
+      ingredients: normalizedIngredients,
+      ...buildRecipeSummary(normalizedIngredients, recipeDraft.servings.trim() || "1", availableFoods),
     };
 
     setSavedRecipes((current) => {
@@ -572,17 +765,13 @@ export function MealsProvider({ children }: PropsWithChildren) {
         return [normalizedRecipe, ...current];
       }
 
-      return current.map((recipe) =>
-        recipe.id === editingRecipeId ? normalizedRecipe : recipe
-      );
+      return current.map((recipe) => (recipe.id === editingRecipeId ? normalizedRecipe : recipe));
     });
 
     setEditingRecipeId(null);
     setPendingRecipeIngredient(null);
     setRecipeDraft(emptyRecipeDraft);
-  }, [editingRecipeId, recipeDraft]);
-
-  const availableFoods = useMemo(() => [...customFoods, ...presetFoodItems], [customFoods]);
+  }, [availableFoods, editingRecipeId, recipeDraft]);
 
   const value = useMemo(
     () => ({
