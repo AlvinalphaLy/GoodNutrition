@@ -48,6 +48,18 @@ type SelectedMealPreview = {
 
 type CustomMealIngredient = Pick<MealDraftItem, "id" | "name" | "quantity" | "unit">;
 
+type AddedItemEditorState = {
+  id: string;
+  quantity: string;
+  unit: string;
+} | null;
+
+type CustomMealItemEditorState = {
+  id: string;
+  quantity: string;
+  unit: string;
+} | null;
+
 export default function AddFoodItemsScreen() {
   const router = useRouter();
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
@@ -60,6 +72,7 @@ export default function AddFoodItemsScreen() {
     applyRecipeToMeal,
     applyLoggedMealToDraft,
     addMealItem,
+    updateMealItem,
     removeMealItem,
     saveCustomFood,
     updateCustomFood,
@@ -78,6 +91,10 @@ export default function AddFoodItemsScreen() {
   const [customEditor, setCustomEditor] = useState<CustomEditorState>(null);
   const [attemptedCustomSave, setAttemptedCustomSave] = useState(false);
   const [customMealItems, setCustomMealItems] = useState<CustomMealIngredient[]>([]);
+  const [addedItemEditor, setAddedItemEditor] = useState<AddedItemEditorState>(null);
+  const [attemptedAddedItemSave, setAttemptedAddedItemSave] = useState(false);
+  const [customMealItemEditor, setCustomMealItemEditor] = useState<CustomMealItemEditorState>(null);
+  const [attemptedCustomMealItemSave, setAttemptedCustomMealItemSave] = useState(false);
 
   const mealMatches = useMemo<MealMatch[]>(() => {
     const normalized = mealSearch.trim().toLowerCase();
@@ -100,6 +117,8 @@ export default function AddFoodItemsScreen() {
     });
 
     loggedMeals.forEach((meal) => {
+      if (meal.logMode !== "meal") return;
+
       const trimmedName = meal.mealName.trim();
       const normalizedName = trimmedName.toLowerCase();
       if (!trimmedName) return;
@@ -210,6 +229,14 @@ export default function AddFoodItemsScreen() {
     ? getAmountError(mealDraft.servingsLogged || "", "Servings")
     : "";
   const customEditorError = attemptedCustomSave && customEditor ? getNamedItemError(customEditor.name, "Custom item name") : "";
+  const addedItemQuantityError = attemptedAddedItemSave && addedItemEditor
+    ? getAmountError(addedItemEditor.quantity)
+    : "";
+  const canSaveAddedItemEdit = !!addedItemEditor && isValidPositiveAmount(addedItemEditor.quantity);
+  const customMealItemQuantityError = attemptedCustomMealItemSave && customMealItemEditor
+    ? getAmountError(customMealItemEditor.quantity)
+    : "";
+  const canSaveCustomMealItemEdit = !!customMealItemEditor && isValidPositiveAmount(customMealItemEditor.quantity);
 
   const summaryName = mealDraft.mealName.trim()
     || (mealDraft.items.length === 1
@@ -230,6 +257,63 @@ export default function AddFoodItemsScreen() {
     setAttemptedAdd(false);
     setCustomEditor(null);
     setAttemptedCustomSave(false);
+  };
+
+  const cancelAddedItemEdit = () => {
+    setAddedItemEditor(null);
+    setAttemptedAddedItemSave(false);
+  };
+
+  const beginAddedItemEdit = (item: MealDraftItem) => {
+    setAddedItemEditor({
+      id: item.id,
+      quantity: item.quantity,
+      unit: item.unit,
+    });
+    setAttemptedAddedItemSave(false);
+  };
+
+  const saveAddedItemEdit = () => {
+    setAttemptedAddedItemSave(true);
+    if (!addedItemEditor || !canSaveAddedItemEdit) return;
+
+    updateMealItem(addedItemEditor.id, {
+      quantity: addedItemEditor.quantity.trim(),
+      unit: addedItemEditor.unit.trim(),
+    });
+    cancelAddedItemEdit();
+  };
+
+  const cancelCustomMealItemEdit = () => {
+    setCustomMealItemEditor(null);
+    setAttemptedCustomMealItemSave(false);
+  };
+
+  const beginCustomMealItemEdit = (item: CustomMealIngredient) => {
+    setCustomMealItemEditor({
+      id: item.id,
+      quantity: item.quantity,
+      unit: item.unit,
+    });
+    setAttemptedCustomMealItemSave(false);
+  };
+
+  const saveCustomMealItemEdit = () => {
+    setAttemptedCustomMealItemSave(true);
+    if (!customMealItemEditor || !canSaveCustomMealItemEdit) return;
+
+    setCustomMealItems((prev) =>
+      prev.map((item) =>
+        item.id === customMealItemEditor.id
+          ? {
+              ...item,
+              quantity: customMealItemEditor.quantity.trim(),
+              unit: customMealItemEditor.unit.trim(),
+            }
+          : item
+      )
+    );
+    cancelCustomMealItemEdit();
   };
 
   const selectFood = (item: PresetFoodItem) => {
@@ -284,6 +368,7 @@ export default function AddFoodItemsScreen() {
     setMealSearch("");
     setMealServingsLogged("1");
     setCustomMealItems([]);
+    cancelCustomMealItemEdit();
     resetFoodEntry();
   };
 
@@ -783,16 +868,84 @@ export default function AddFoodItemsScreen() {
               ) : (
                 customMealItems.map((item) => (
                   <View key={item.id} style={styles.itemRow}>
-                    <View style={styles.itemTextWrap}>
-                      <Text style={styles.itemTitle}>{item.name}</Text>
-                      <Text style={styles.itemSubtitle}>{formatQuantityLabel(item.quantity, item.unit)}</Text>
+                    <View style={styles.itemHeaderRow}>
+                      <View style={styles.itemTextWrap}>
+                        <Text style={styles.itemTitle}>{item.name}</Text>
+                        <Text style={styles.itemSubtitle}>{formatQuantityLabel(item.quantity, item.unit)}</Text>
+                      </View>
+
+                      <View style={styles.itemActionRow}>
+                        <Pressable
+                          style={styles.itemEditButton}
+                          onPress={() => beginCustomMealItemEdit(item)}
+                        >
+                          <Text style={styles.itemEditButtonText}>Edit</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.itemRemoveButton}
+                          onPress={() => {
+                            if (customMealItemEditor?.id === item.id) {
+                              cancelCustomMealItemEdit();
+                            }
+                            setCustomMealItems((prev) => prev.filter((entry) => entry.id !== item.id));
+                          }}
+                        >
+                          <Text style={styles.itemRemoveButtonText}>Remove</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                    <Pressable
-                      style={styles.removeButton}
-                      onPress={() => setCustomMealItems((prev) => prev.filter((entry) => entry.id !== item.id))}
-                    >
-                      <Text style={styles.removeButtonText}>Remove</Text>
-                    </Pressable>
+
+                    {customMealItemEditor?.id === item.id ? (
+                      <View style={styles.inlineItemEditor}>
+                        <Text style={styles.editorLabel}>Quantity</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="e.g. 1, 1/2, or 2"
+                          placeholderTextColor={fieldPlaceholderColor}
+                          value={customMealItemEditor.quantity}
+                          onChangeText={(value) =>
+                            setCustomMealItemEditor((prev) => (prev ? { ...prev, quantity: value } : prev))
+                          }
+                          keyboardType="numbers-and-punctuation"
+                        />
+                        {customMealItemQuantityError ? <Text style={styles.errorText}>{customMealItemQuantityError}</Text> : null}
+
+                        <Text style={styles.editorLabel}>Unit</Text>
+                        <View style={styles.unitChips}>
+                          <Pressable
+                            style={[styles.unitChip, !customMealItemEditor.unit && styles.unitChipSelected]}
+                            onPress={() =>
+                              setCustomMealItemEditor((prev) => (prev ? { ...prev, unit: "" } : prev))
+                            }
+                          >
+                            <Text style={[styles.unitChipText, !customMealItemEditor.unit && styles.unitChipTextSelected]}>No unit</Text>
+                          </Pressable>
+                          {commonUnits.map((chipUnit) => {
+                            const isSelected = customMealItemEditor.unit.trim().toLowerCase() === chipUnit.toLowerCase();
+                            return (
+                              <Pressable
+                                key={`${item.id}-${chipUnit}`}
+                                style={[styles.unitChip, isSelected && styles.unitChipSelected]}
+                                onPress={() =>
+                                  setCustomMealItemEditor((prev) => (prev ? { ...prev, unit: chipUnit } : prev))
+                                }
+                              >
+                                <Text style={[styles.unitChipText, isSelected && styles.unitChipTextSelected]}>{chipUnit}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+
+                        <View style={styles.editorButtonRow}>
+                          <Pressable style={styles.inlineEditButton} onPress={saveCustomMealItemEdit}>
+                            <Text style={styles.inlineEditButtonText}>Save</Text>
+                          </Pressable>
+                          <Pressable style={styles.inlineDeleteButton} onPress={cancelCustomMealItemEdit}>
+                            <Text style={styles.inlineDeleteButtonText}>Cancel</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               )}
@@ -824,7 +977,7 @@ export default function AddFoodItemsScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Added Items</Text>
           <Text style={styles.sectionText}>
-            Review what you&apos;ve added so far. Remove anything you don&apos;t want before finishing.
+            Review and edit what you&apos;ve added so far. Remove anything you don&apos;t want before finishing.
           </Text>
 
           {mealDraft.items.length === 0 ? (
@@ -837,16 +990,92 @@ export default function AddFoodItemsScreen() {
           ) : (
             mealDraft.items.map((item) => (
               <View key={item.id} style={styles.itemRow}>
-                <View style={styles.itemTextWrap}>
-                  <Text style={styles.itemTitle}>{item.name}</Text>
-                  <Text style={styles.itemSubtitle}>
-                    {formatQuantityLabel(item.quantity, item.unit)}
-                    {item.entryKind === "meal" && item.nestedItems?.length ? ` • ${item.nestedItems.length} item${item.nestedItems.length === 1 ? "" : "s"}` : ""}
-                  </Text>
+                <View style={styles.itemHeaderRow}>
+                  <View style={styles.itemTextWrap}>
+                    <Text style={styles.itemTitle}>{item.name}</Text>
+                    <Text style={styles.itemSubtitle}>
+                      {formatQuantityLabel(item.quantity, item.unit)}
+                      {item.entryKind === "meal" && item.nestedItems?.length ? ` • ${item.nestedItems.length} item${item.nestedItems.length === 1 ? "" : "s"}` : ""}
+                    </Text>
+                  </View>
+
+                  <View style={styles.itemActionRow}>
+                    <Pressable style={styles.itemEditButton} onPress={() => beginAddedItemEdit(item)}>
+                      <Text style={styles.itemEditButtonText}>Edit</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.itemRemoveButton}
+                      onPress={() => {
+                        if (addedItemEditor?.id === item.id) {
+                          cancelAddedItemEdit();
+                        }
+                        removeMealItem(item.id);
+                      }}
+                    >
+                      <Text style={styles.itemRemoveButtonText}>Remove</Text>
+                    </Pressable>
+                  </View>
                 </View>
-                <Pressable style={styles.removeButton} onPress={() => removeMealItem(item.id)}>
-                  <Text style={styles.removeButtonText}>Remove</Text>
-                </Pressable>
+
+                {item.entryKind === "meal" && item.nestedItems?.length ? (
+                  <View style={styles.nestedList}>
+                    {item.nestedItems.map((nestedItem) => (
+                      <Text key={nestedItem.id} style={styles.nestedItemText}>
+                        • {nestedItem.name} — {formatQuantityLabel(nestedItem.quantity, nestedItem.unit)}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+
+                {addedItemEditor?.id === item.id ? (
+                  <View style={styles.inlineItemEditor}>
+                    <Text style={styles.editorLabel}>Quantity</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. 1, 1/2, or 2"
+                      placeholderTextColor={fieldPlaceholderColor}
+                      value={addedItemEditor.quantity}
+                      onChangeText={(value) =>
+                        setAddedItemEditor((prev) => (prev ? { ...prev, quantity: value } : prev))
+                      }
+                      keyboardType="numbers-and-punctuation"
+                    />
+                    {addedItemQuantityError ? <Text style={styles.errorText}>{addedItemQuantityError}</Text> : null}
+
+                    <Text style={styles.editorLabel}>Unit</Text>
+                    <View style={styles.unitChips}>
+                      <Pressable
+                        style={[styles.unitChip, !addedItemEditor.unit && styles.unitChipSelected]}
+                        onPress={() => setAddedItemEditor((prev) => (prev ? { ...prev, unit: "" } : prev))}
+                      >
+                        <Text style={[styles.unitChipText, !addedItemEditor.unit && styles.unitChipTextSelected]}>No unit</Text>
+                      </Pressable>
+                      {commonUnits.map((chipUnit) => {
+                        const isSelected = addedItemEditor.unit.trim().toLowerCase() === chipUnit.toLowerCase();
+                        return (
+                          <Pressable
+                            key={`${item.id}-${chipUnit}`}
+                            style={[styles.unitChip, isSelected && styles.unitChipSelected]}
+                            onPress={() =>
+                              setAddedItemEditor((prev) => (prev ? { ...prev, unit: chipUnit } : prev))
+                            }
+                          >
+                            <Text style={[styles.unitChipText, isSelected && styles.unitChipTextSelected]}>{chipUnit}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    <View style={styles.editorButtonRow}>
+                      <Pressable style={styles.inlineEditButton} onPress={saveAddedItemEdit}>
+                        <Text style={styles.inlineEditButtonText}>Save</Text>
+                      </Pressable>
+                      <Pressable style={styles.inlineDeleteButton} onPress={cancelAddedItemEdit}>
+                        <Text style={styles.inlineDeleteButtonText}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             ))
           )}
@@ -1214,16 +1443,24 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   itemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: "#f3f4f6",
+    gap: 12,
+  },
+  itemHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  itemActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexShrink: 0,
   },
   itemTextWrap: {
     flex: 1,
-    marginRight: 12,
   },
   itemTitle: {
     fontSize: 15,
@@ -1235,15 +1472,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6b7280",
   },
-  removeButton: {
+  itemEditButton: {
+    backgroundColor: "#dcfce7",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 78,
+  },
+  itemEditButtonText: {
+    color: "#166534",
+    fontWeight: "700",
+  },
+  itemRemoveButton: {
     backgroundColor: "#fee2e2",
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 92,
   },
-  removeButtonText: {
+  itemRemoveButtonText: {
     color: "#b91c1c",
     fontWeight: "700",
+  },
+  nestedList: {
+    marginTop: -2,
+    paddingLeft: 4,
+  },
+  nestedItemText: {
+    fontSize: 13,
+    color: "#4b5563",
+    lineHeight: 19,
+    marginBottom: 2,
+  },
+  inlineItemEditor: {
+    marginTop: 4,
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
   inlineActionRow: {
     flexDirection: "row",
