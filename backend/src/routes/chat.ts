@@ -13,7 +13,7 @@
  * POST /api/sessions/:sessionId/chat
  *
  * Request body:
- *   { "message": "What should I eat for lunch?" }
+ *   { "message": "What should I eat for lunch?", "attachment": { ... } }
  *
  * Response: text/event-stream (SSE)
  *   Each event carries one of:

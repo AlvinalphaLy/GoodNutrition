@@ -81,9 +81,16 @@ export default function MealsHubScreen() {
                   {meal.logMode === "meal" ? ` • ${meal.servingsLogged || "1"} serving(s)` : ""}
                 </Text>
                 {meal.items.map((item) => (
-                  <Text key={item.id} style={styles.logItemText}>
-                    • {item.name} — {formatQuantityLabel(item.quantity, item.unit)}
-                  </Text>
+                  <View key={item.id}>
+                    <Text style={styles.logItemText}>
+                      • {item.name} — {formatQuantityLabel(item.quantity, item.unit)}
+                    </Text>
+                    {item.calories != null ? (
+                      <Text style={styles.logItemMacro}>
+                        {"  "}{item.calories} kcal · P {item.protein}g · C {item.carbs}g · F {item.fat}g
+                      </Text>
+                    ) : null}
+                  </View>
                 ))}
                 <Text style={styles.tapHint}>Tap to view details</Text>
               </Pressable>
@@ -213,6 +220,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#374151",
     lineHeight: 20,
+    marginBottom: 2,
+  },
+  logItemMacro: {
+    fontSize: 12,
+    color: "#10B981",
     marginBottom: 4,
   },
   tapHint: {

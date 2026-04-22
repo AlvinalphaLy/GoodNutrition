@@ -33,12 +33,12 @@ export interface UserProfile {
   userId: string;
   name?: string;
   goals: GoalType[];
-  allergies: string[];           // e.g. ["peanuts", "shellfish"]
+  allergies: string[]; // e.g. ["peanuts", "shellfish"]
   dietaryPreferences: DietaryPreference[];
   cookingSkill: CookingSkill;
   budgetLevel: BudgetLevel;
-  weeklySchedule?: string;       // e.g. "works late Mon–Wed, meal preps Sunday"
-  culturalBackground?: string;   // e.g. "West African", "Mediterranean"
+  weeklySchedule?: string; // e.g. "works late Mon–Wed, meal preps Sunday"
+  culturalBackground?: string; // e.g. "West African", "Mediterranean"
 }
 
 export const DEFAULT_PROFILE: Omit<UserProfile, "userId"> = {
@@ -52,6 +52,13 @@ export const DEFAULT_PROFILE: Omit<UserProfile, "userId"> = {
 // ─── API Contracts ──────────────────────────────────────────────────────────
 export interface SendMessageRequest {
   message: string;
+  attachment?: ChatAttachment | null;
+}
+
+export interface ChatAttachment {
+  name: string;
+  mimeType: string;
+  base64: string;
 }
 
 export interface StreamChunk {
@@ -79,7 +86,7 @@ export interface UseAiChatReturn {
   isStreaming: boolean;
   error: string | null;
   sessionId: string;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, attachment?: ChatAttachment | null) => void;
   loadHistory: () => Promise<void>;
   clearError: () => void;
   stopStream: () => void;

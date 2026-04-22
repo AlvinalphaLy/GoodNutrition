@@ -21,6 +21,15 @@ import {
   isValidNamedItem,
   isValidPositiveAmount,
 } from "../validation";
+import { lookupNutrition } from "../../../../src/features/voice-log/services/nutritionLookup";
+import type { NutritionInfo } from "../../../../src/features/voice-log/types/voice";
+
+function parseQty(raw: string): number {
+  const trimmed = raw.trim();
+  const fraction = trimmed.match(/^(\d+)\/(\d+)$/);
+  if (fraction) return parseInt(fraction[1]) / parseInt(fraction[2]);
+  return parseFloat(trimmed) || 1;
+}
 
 type MealMatch =
   | { id: string; name: string; kind: "recipe"; subtitle: string }
@@ -46,7 +55,9 @@ type SelectedMealPreview = {
   items: { id: string; name: string; quantity: string; unit: string }[];
 } | null;
 
-type CustomMealIngredient = Pick<MealDraftItem, "id" | "name" | "quantity" | "unit">;
+type CustomMealIngredient = Pick<MealDraftItem, "id" | "name" | "quantity" | "unit"> & {
+  nutrition?: NutritionInfo | null;
+};
 
 export default function AddFoodItemsScreen() {
   const router = useRouter();
@@ -78,6 +89,7 @@ export default function AddFoodItemsScreen() {
   const [customEditor, setCustomEditor] = useState<CustomEditorState>(null);
   const [attemptedCustomSave, setAttemptedCustomSave] = useState(false);
   const [customMealItems, setCustomMealItems] = useState<CustomMealIngredient[]>([]);
+  const [lookingUp, setLookingUp] = useState(false);
 
   const mealMatches = useMemo<MealMatch[]>(() => {
     const normalized = mealSearch.trim().toLowerCase();
@@ -305,14 +317,33 @@ export default function AddFoodItemsScreen() {
     }
 
     if (customMealSelected && customMealItems.length > 0) {
+      const hasNutrition = customMealItems.some((i) => i.nutrition?.calories != null);
+      const summed = hasNutrition
+        ? customMealItems.reduce(
+            (acc, i) => ({
+              calories: acc.calories + (i.nutrition?.calories ?? 0),
+              protein:  acc.protein  + (i.nutrition?.protein  ?? 0),
+              carbs:    acc.carbs    + (i.nutrition?.carbs    ?? 0),
+              fat:      acc.fat      + (i.nutrition?.fat      ?? 0),
+            }),
+            { calories: 0, protein: 0, carbs: 0, fat: 0 }
+          )
+        : null;
+
       addMealItem({
         name: mealDraft.mealName.trim(),
         quantity: mealDraft.servingsLogged.trim() || "1",
         unit: "serving",
         entryKind: "meal",
-        nestedItems: customMealItems.map((item) => ({ ...item })),
+        nestedItems: customMealItems.map(({ id, name, quantity, unit }) => ({ id, name, quantity, unit })),
         mealSourceType: "custom",
         mealSourceId: null,
+        ...(summed && {
+          calories: Math.round(summed.calories),
+          protein:  Math.round(summed.protein  * 10) / 10,
+          carbs:    Math.round(summed.carbs    * 10) / 10,
+          fat:      Math.round(summed.fat      * 10) / 10,
+        }),
       });
       clearSelectedMeal();
     }
@@ -720,9 +751,9 @@ export default function AddFoodItemsScreen() {
             </View>
 
             <Pressable
-              style={[styles.primaryButton, !canAddItem && styles.buttonDisabled]}
-              disabled={!canAddItem}
-              onPress={() => {
+              style={[styles.primaryButton, (!canAddItem || lookingUp) && styles.buttonDisabled]}
+              disabled={!canAddItem || lookingUp}
+              onPress={async () => {
                 setAttemptedAdd(true);
                 if (!canAddItem || !selectedFood) return;
 
@@ -737,6 +768,14 @@ export default function AddFoodItemsScreen() {
                   }
                 }
 
+                setLookingUp(true);
+                const nutrition = await lookupNutrition(
+                  normalizedName,
+                  parseQty(quantity),
+                  normalizedUnit || null
+                );
+                setLookingUp(false);
+
                 if (customMealSelected) {
                   setCustomMealItems((prev) => [
                     ...prev,
@@ -745,6 +784,7 @@ export default function AddFoodItemsScreen() {
                       name: normalizedName,
                       quantity: quantity.trim(),
                       unit: normalizedUnit,
+                      nutrition,
                     },
                   ]);
                 } else {
@@ -753,13 +793,31 @@ export default function AddFoodItemsScreen() {
                     quantity: quantity.trim(),
                     unit: normalizedUnit,
                     entryKind: "single",
+                    calories:                  nutrition?.calories,
+                    protein:                   nutrition?.protein,
+                    carbs:                     nutrition?.carbs,
+                    fat:                       nutrition?.fat,
+                    saturated_fat:             nutrition?.saturated_fat,
+                    sugars:                    nutrition?.sugars,
+                    fiber:                     nutrition?.fiber,
+                    salt:                      nutrition?.salt,
+                    sodium:                    nutrition?.sodium,
+                    serving_size:              nutrition?.serving_size,
+                    brand:                     nutrition?.brand,
+                    nova_group:                nutrition?.nova_group,
+                    nutriscore_grade:          nutrition?.nutriscore_grade,
+                    additives_tags:            nutrition?.additives_tags,
+                    allergens_tags:            nutrition?.allergens_tags,
+                    ingredients_analysis_tags: nutrition?.ingredients_analysis_tags,
+                    nutrient_levels:           nutrition?.nutrient_levels,
+                    ingredients_text:          nutrition?.ingredients_text,
                   });
                 }
                 resetFoodEntry();
               }}
             >
-              <Text style={[styles.primaryButtonText, !canAddItem && styles.buttonTextDisabled]}>
-                Add Food Item
+              <Text style={[styles.primaryButtonText, (!canAddItem || lookingUp) && styles.buttonTextDisabled]}>
+                {lookingUp ? "Looking up nutrition…" : "Add Food Item"}
               </Text>
             </Pressable>
           </>
