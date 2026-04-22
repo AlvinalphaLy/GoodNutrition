@@ -107,6 +107,10 @@ type MealsContextValue = {
   applyRecipeToMeal: (recipeId: string) => void;
   applyLoggedMealToDraft: (loggedMealId: string) => void;
   addMealItem: (item: Omit<MealDraftItem, "id">) => void;
+  updateMealItem: (
+    id: string,
+    updates: Partial<Pick<MealDraftItem, "quantity" | "unit" | "name">>
+  ) => void;
   removeMealItem: (id: string) => void;
   saveCustomFood: (name: string, suggestedUnit?: string) => PresetFoodItem;
   updateCustomFood: (id: string, name: string, suggestedUnit: string) => void;
@@ -293,7 +297,7 @@ export function MealsProvider({ children }: PropsWithChildren) {
   const applyLoggedMealToDraft = useCallback(
     (loggedMealId: string) => {
       const existingMeal = loggedMeals.find((entry) => entry.id === loggedMealId);
-      if (!existingMeal) return;
+      if (!existingMeal || existingMeal.logMode !== "meal") return;
 
       setMealDraft((prev) => ({
         ...prev,
@@ -311,6 +315,23 @@ export function MealsProvider({ children }: PropsWithChildren) {
     setMealDraft((prev) => ({
       ...prev,
       items: [...prev.items, { ...item, id: createId(), entryKind: item.entryKind ?? "single" }],
+    }));
+  }, []);
+
+  const updateMealItem = useCallback((
+    id: string,
+    updates: Partial<Pick<MealDraftItem, "quantity" | "unit" | "name">>
+  ) => {
+    setMealDraft((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              ...updates,
+            }
+          : item
+      ),
     }));
   }, []);
 
@@ -584,6 +605,7 @@ export function MealsProvider({ children }: PropsWithChildren) {
       applyRecipeToMeal,
       applyLoggedMealToDraft,
       addMealItem,
+      updateMealItem,
       removeMealItem,
       saveCustomFood,
       updateCustomFood,
@@ -620,6 +642,7 @@ export function MealsProvider({ children }: PropsWithChildren) {
       applyRecipeToMeal,
       applyLoggedMealToDraft,
       addMealItem,
+      updateMealItem,
       removeMealItem,
       saveCustomFood,
       updateCustomFood,
