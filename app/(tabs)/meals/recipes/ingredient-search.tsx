@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo, useState } from "react";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,17 +17,27 @@ import { fieldPlaceholderColor, formatQuantityLabel } from "../display";
 import { commonUnits, type PresetFoodItem } from "../meals-data";
 import { useMeals } from "../meals-context";
 import {
+  buildOpenFoodFactsNutrition,
+  getOpenFoodFactsDefaultUnit,
+} from "../nutrition";
+import {
   getAmountError,
   getNamedItemError,
   isValidNamedItem,
   isValidPositiveAmount,
 } from "../validation";
+import {
+  searchOpenFoodFactsPage,
+  type OpenFoodFactsSearchProduct,
+} from "../../../../src/lib/openFoodFacts";
 
 type SelectedIngredientState = {
   id: string | null;
   name: string;
-  source: "system" | "custom";
+  source: "system" | "custom" | "off";
   isLibraryItem: boolean;
+  brand?: string;
+  offProduct?: OpenFoodFactsSearchProduct | null;
 };
 
 type CustomEditorState = {
@@ -42,6 +53,7 @@ export default function IngredientSearchScreen() {
   const {
     recipeDraft,
     presetFoods,
+    customFoods,
     addRecipeIngredient,
     updateRecipeIngredient,
     removeRecipeIngredient,
@@ -62,13 +74,18 @@ export default function IngredientSearchScreen() {
   const [editQuantity, setEditQuantity] = useState("");
   const [editUnit, setEditUnit] = useState("");
   const [attemptedIngredientEditSave, setAttemptedIngredientEditSave] = useState(false);
+  const [offResults, setOffResults] = useState<OpenFoodFactsSearchProduct[]>([]);
+  const [offSearchLoading, setOffSearchLoading] = useState(false);
+  const [offSearchLoadingMore, setOffSearchLoadingMore] = useState(false);
+  const [offSearchStatus, setOffSearchStatus] = useState<string | null>(null);
+  const [hasSearchedOff, setHasSearchedOff] = useState(false);
+  const [offResultsPage, setOffResultsPage] = useState(1);
+  const [offResultsHasMore, setOffResultsHasMore] = useState(false);
+  const [offResultsQuery, setOffResultsQuery] = useState("");
 
-  const filteredIngredients = useMemo(() => {
+  const filteredPresetIngredients = useMemo(() => {
     const normalized = search.trim().toLowerCase();
-
-    if (!normalized) {
-      return presetFoods.slice(0, 10);
-    }
+    if (!normalized) return presetFoods.slice(0, 10);
 
     return presetFoods.filter((food) => {
       const haystack = [food.name, ...(food.aliases ?? [])].join(" ").toLowerCase();
@@ -76,7 +93,17 @@ export default function IngredientSearchScreen() {
     });
   }, [presetFoods, search]);
 
-  const exactMatchExists = useMemo(() => {
+  const filteredCustomIngredients = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return customFoods.slice(0, 10);
+
+    return customFoods.filter((food) => {
+      const haystack = [food.name, ...(food.aliases ?? [])].join(" ").toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [customFoods, search]);
+
+  const exactPresetMatchExists = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     if (!normalized) return false;
 
@@ -86,8 +113,35 @@ export default function IngredientSearchScreen() {
     });
   }, [presetFoods, search]);
 
+  const exactCustomMatchExists = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return false;
+
+    return customFoods.some((food) => {
+      const names = [food.name, ...(food.aliases ?? [])].map((entry) => entry.toLowerCase());
+      return names.includes(normalized);
+    });
+  }, [customFoods, search]);
+
+  const exactOffMatchExists = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return false;
+
+    return offResults.some((food) => food.product_name.trim().toLowerCase() === normalized);
+  }, [offResults, search]);
+
   const quantityIsValid = isValidPositiveAmount(quantity);
-  const canAddIngredient = !!selectedIngredient?.name.trim() && quantityIsValid;
+  const selectedIngredientNutrition = useMemo(() => {
+    if (selectedIngredient?.source !== "off" || !selectedIngredient.offProduct) return null;
+
+    return buildOpenFoodFactsNutrition(
+      selectedIngredient.offProduct,
+      quantity,
+      unit.trim() || getOpenFoodFactsDefaultUnit(selectedIngredient.offProduct)
+    );
+  }, [quantity, selectedIngredient, unit]);
+  const availableIngredientUnits = selectedIngredient?.source === "off" ? (["serving", "g"] as const) : commonUnits;
+  const canAddIngredient = !!selectedIngredient?.name.trim() && quantityIsValid && (selectedIngredient?.source !== "off" || !!selectedIngredientNutrition);
   const canReview = recipeDraft.ingredients.length > 0;
   const ingredientError = attemptedAdd || selectedIngredient?.name.trim()
     ? getNamedItemError(selectedIngredient?.name ?? "", "Ingredient")
@@ -97,8 +151,11 @@ export default function IngredientSearchScreen() {
     !selectedIngredient &&
     search.trim().length > 0 &&
     isValidNamedItem(search) &&
-    filteredIngredients.length === 0 &&
-    !exactMatchExists;
+    filteredPresetIngredients.length === 0 &&
+    filteredCustomIngredients.length === 0 &&
+    !exactPresetMatchExists &&
+    !exactCustomMatchExists &&
+    !exactOffMatchExists;
   const customEditorError = attemptedCustomSave && customEditor ? getNamedItemError(customEditor.name, "Custom ingredient name") : "";
   const editQuantityError = attemptedIngredientEditSave || editQuantity.trim() ? getAmountError(editQuantity) : "";
   const canSaveIngredientEdit = isValidPositiveAmount(editQuantity);
@@ -109,6 +166,7 @@ export default function IngredientSearchScreen() {
       name: item.name,
       source: item.source,
       isLibraryItem: true,
+      offProduct: null,
     });
     setSearch(item.name);
     setAttemptedAdd(false);
@@ -125,6 +183,7 @@ export default function IngredientSearchScreen() {
       name: trimmedName,
       source: "custom",
       isLibraryItem: false,
+      offProduct: null,
     });
     setSearch(trimmedName);
     setAttemptedAdd(false);
@@ -140,6 +199,14 @@ export default function IngredientSearchScreen() {
     setAttemptedAdd(false);
     setCustomEditor(null);
     setAttemptedCustomSave(false);
+    setOffResults([]);
+    setOffSearchStatus(null);
+    setOffSearchLoading(false);
+    setOffSearchLoadingMore(false);
+    setHasSearchedOff(false);
+    setOffResultsPage(1);
+    setOffResultsHasMore(false);
+    setOffResultsQuery("");
   };
 
   const startCustomEditor = (item: PresetFoodItem) => {
@@ -212,6 +279,103 @@ export default function IngredientSearchScreen() {
     cancelIngredientEdit();
   };
 
+  const selectOffIngredient = (product: OpenFoodFactsSearchProduct) => {
+    const normalizedName = product.product_name.trim();
+    setSelectedIngredient({
+      id: product.code,
+      name: normalizedName,
+      source: "off",
+      isLibraryItem: false,
+      brand: product.brands ?? undefined,
+      offProduct: product,
+    });
+    setSearch(normalizedName);
+    setAttemptedAdd(false);
+    setQuantity("");
+    setUnit(getOpenFoodFactsDefaultUnit(product));
+    setCustomEditor(null);
+    setAttemptedCustomSave(false);
+    setOffSearchStatus(null);
+  };
+
+  const handleOffSearch = async () => {
+    const trimmedQuery = search.trim();
+
+    if (trimmedQuery.length < 3) {
+      setOffResults([]);
+      setHasSearchedOff(false);
+      setOffResultsPage(1);
+      setOffResultsHasMore(false);
+      setOffResultsQuery("");
+      setOffSearchStatus("Enter at least 3 characters before searching Open Food Facts.");
+      return;
+    }
+
+    setOffSearchLoading(true);
+    setOffSearchStatus(null);
+    setHasSearchedOff(true);
+
+    try {
+      const resultPage = await searchOpenFoodFactsPage(trimmedQuery, 1, 8);
+      setOffResults(resultPage.products);
+      setOffResultsPage(resultPage.page);
+      setOffResultsHasMore(resultPage.hasMore);
+      setOffResultsQuery(trimmedQuery);
+
+      if (resultPage.products.length === 0) {
+        setOffSearchStatus(
+          filteredCustomIngredients.length > 0
+            ? "No Open Food Facts matches found. Matching custom ingredients are shown below."
+            : "No Open Food Facts matches found. You can create a custom ingredient below."
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("RATE_LIMIT:")) {
+        const waitMs = Number(message.split(":")[1] ?? 0);
+        const waitSeconds = Math.max(1, Math.ceil(waitMs / 1000));
+        setOffSearchStatus(`Search limit reached. Wait about ${waitSeconds}s and try again.`);
+      } else {
+        setOffSearchStatus("We couldn't reach Open Food Facts right now. Please try again.");
+      }
+      setOffResults([]);
+      setOffResultsPage(1);
+      setOffResultsHasMore(false);
+      setOffResultsQuery("");
+    } finally {
+      setOffSearchLoading(false);
+    }
+  };
+
+  const handleLoadMoreOffResults = async () => {
+    if (!offResultsHasMore || offSearchLoadingMore || !offResultsQuery) return;
+
+    setOffSearchLoadingMore(true);
+    setOffSearchStatus(null);
+    try {
+      const nextPage = offResultsPage + 1;
+      const resultPage = await searchOpenFoodFactsPage(offResultsQuery, nextPage, 8);
+      setOffResults((prev) => {
+        const seenCodes = new Set(prev.map((item) => item.code));
+        const appended = resultPage.products.filter((item) => !seenCodes.has(item.code));
+        return [...prev, ...appended];
+      });
+      setOffResultsPage(resultPage.page);
+      setOffResultsHasMore(resultPage.hasMore);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("RATE_LIMIT:")) {
+        const waitMs = Number(message.split(":")[1] ?? 0);
+        const waitSeconds = Math.max(1, Math.ceil(waitMs / 1000));
+        setOffSearchStatus(`Search limit reached. Wait about ${waitSeconds}s and try again.`);
+      } else {
+        setOffSearchStatus("We couldn't load more Open Food Facts results right now. Please try again.");
+      }
+    } finally {
+      setOffSearchLoadingMore(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -235,7 +399,7 @@ export default function IngredientSearchScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Ingredient</Text>
           <Text style={styles.sectionText}>
-            Search for an ingredient. If it isn&apos;t found, create a custom ingredient.
+            Search for an ingredient. If it isn't found, create a custom ingredient.
           </Text>
 
           <TextInput
@@ -245,6 +409,9 @@ export default function IngredientSearchScreen() {
             value={search}
             onChangeText={(value) => {
               setSearch(value);
+              setOffResults([]);
+              setHasSearchedOff(false);
+              setOffSearchStatus(null);
               if (selectedIngredient && value.trim() !== selectedIngredient.name.trim()) {
                 setSelectedIngredient(null);
                 setQuantity("");
@@ -253,12 +420,26 @@ export default function IngredientSearchScreen() {
             }}
           />
 
+          {!selectedIngredient?.name.trim() ? (
+            <Pressable
+              style={[styles.searchButton, offSearchLoading && styles.buttonDisabled]}
+              onPress={handleOffSearch}
+              disabled={offSearchLoading}
+            >
+              {offSearchLoading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.searchButtonText}>Search Open Food Facts</Text>}
+            </Pressable>
+          ) : null}
+
           {selectedIngredient?.name.trim() ? (
             <View style={styles.selectedCard}>
               <View style={styles.selectedHeaderRow}>
                 <View style={styles.selectedTextWrap}>
                   <Text style={styles.selectedLabel}>Selected ingredient</Text>
                   <Text style={styles.selectedValue}>{selectedIngredient.name.trim()}</Text>
+                  {selectedIngredient.brand ? <Text style={styles.selectedMeta}>{selectedIngredient.brand}</Text> : null}
+                  {selectedIngredient.source === "off" && selectedIngredient.offProduct?.serving_size ? (
+                    <Text style={styles.selectedMeta}>Serving size: {selectedIngredient.offProduct.serving_size}</Text>
+                  ) : null}
                 </View>
                 <Pressable onPress={clearSelection}>
                   <Text style={styles.changeLink}>Change</Text>
@@ -307,7 +488,7 @@ export default function IngredientSearchScreen() {
                     <Pressable
                       style={styles.inlineEditButton}
                       onPress={() => {
-                        const customItem = presetFoods.find((item) => item.id === selectedIngredient.id);
+                        const customItem = customFoods.find((item) => item.id === selectedIngredient.id);
                         if (customItem) startCustomEditor(customItem);
                       }}
                     >
@@ -316,7 +497,7 @@ export default function IngredientSearchScreen() {
                     <Pressable
                       style={styles.inlineDeleteButton}
                       onPress={() => {
-                        const customItem = presetFoods.find((item) => item.id === selectedIngredient.id);
+                        const customItem = customFoods.find((item) => item.id === selectedIngredient.id);
                         if (customItem) handleRemoveCustomIngredient(customItem);
                       }}
                     >
@@ -328,31 +509,86 @@ export default function IngredientSearchScreen() {
             </View>
           ) : (
             <View style={styles.resultsBlock}>
-              <Text style={styles.resultsTitle}>Ingredient matches</Text>
+              <Text style={styles.resultsTitle}>Search results</Text>
+              <Text style={styles.sectionText}>Use preset ingredients for quick logging, search Open Food Facts when you want broader product data, or reuse your custom ingredients below.</Text>
 
-              {filteredIngredients.length === 0 ? (
+              {offSearchStatus ? <Text style={styles.helperText}>{offSearchStatus}</Text> : null}
+
+              {filteredPresetIngredients.length > 0 ? (
+                <>
+                  <Text style={styles.resultsSubtitle}>Preset ingredients</Text>
+                  {filteredPresetIngredients.map((food) => (
+                    <View key={food.id} style={styles.resultRow}>
+                      <Pressable style={styles.resultPressable} onPress={() => selectIngredient(food)}>
+                        <View style={styles.resultTextWrap}>
+                          <Text style={styles.resultTitle}>{food.name}</Text>
+                          <Text style={styles.resultSubtitle}>Suggested unit: {food.suggestedUnit} • preset</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+
+              {hasSearchedOff && !offSearchLoading && offResults.length > 0 ? (
+                <>
+                  <Text style={styles.resultsSubtitle}>Open Food Facts results</Text>
+                  {offResults.map((food) => (
+                    <View key={food.code} style={styles.resultRow}>
+                      <Pressable style={styles.resultPressable} onPress={() => selectOffIngredient(food)}>
+                        <View style={styles.resultTextWrap}>
+                          <Text style={styles.resultTitle}>{food.product_name}</Text>
+                          <Text style={styles.resultSubtitle}>
+                            {food.brands ? `${food.brands} • ` : ""}
+                            Default unit: {getOpenFoodFactsDefaultUnit(food)}
+                            {food.serving_size ? ` • ${food.serving_size}` : ""}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                      </Pressable>
+                    </View>
+                  ))}
+                  {offResultsHasMore ? (
+                    <Pressable
+                      style={[styles.searchButton, offSearchLoadingMore && styles.buttonDisabled]}
+                      onPress={handleLoadMoreOffResults}
+                      disabled={offSearchLoadingMore}
+                    >
+                      {offSearchLoadingMore ? (
+                        <ActivityIndicator color="#ffffff" />
+                      ) : (
+                        <Text style={styles.searchButtonText}>Show More</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                </>
+              ) : null}
+
+
+              {filteredCustomIngredients.length > 0 ? (
+                <>
+                  <Text style={styles.resultsSubtitle}>Your custom ingredients</Text>
+                  {filteredCustomIngredients.map((food) => (
+                    <View key={food.id} style={styles.resultRow}>
+                      <Pressable style={styles.resultPressable} onPress={() => selectIngredient(food)}>
+                        <View style={styles.resultTextWrap}>
+                          <Text style={styles.resultTitle}>{food.name}</Text>
+                          <Text style={styles.resultSubtitle}>Suggested unit: {food.suggestedUnit} • custom</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+
+              {!offSearchLoading && hasSearchedOff && offResults.length === 0 && filteredPresetIngredients.length === 0 && filteredCustomIngredients.length === 0 ? (
                 <View style={styles.emptyMatchCard}>
                   <Text style={styles.emptyMatchTitle}>No ingredients found</Text>
-                  <Text style={styles.emptyMatchText}>
-                    Create a custom ingredient below if needed.
-                  </Text>
+                  <Text style={styles.emptyMatchText}>Create a custom ingredient below if Open Food Facts doesn't have what you need.</Text>
                 </View>
-              ) : (
-                filteredIngredients.map((food) => (
-                  <View key={food.id} style={styles.resultRow}>
-                    <Pressable style={styles.resultPressable} onPress={() => selectIngredient(food)}>
-                      <View style={styles.resultTextWrap}>
-                        <Text style={styles.resultTitle}>{food.name}</Text>
-                        <Text style={styles.resultSubtitle}>
-                          Suggested unit: {food.suggestedUnit}
-                          {food.source === "custom" ? " • custom" : ""}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                    </Pressable>
-                  </View>
-                ))
-              )}
+              ) : null}
 
               {canCreateCustomIngredient ? (
                 <Pressable style={styles.customButton} onPress={selectCustomIngredient}>
@@ -396,13 +632,15 @@ export default function IngredientSearchScreen() {
               ) : null}
 
               <View style={styles.unitChips}>
-                <Pressable
-                  style={[styles.unitChip, !unit && styles.unitChipSelected]}
-                  onPress={() => setUnit("")}
-                >
-                  <Text style={[styles.unitChipText, !unit && styles.unitChipTextSelected]}>No unit</Text>
-                </Pressable>
-                {commonUnits.map((item) => {
+                {selectedIngredient?.source !== "off" ? (
+                  <Pressable
+                    style={[styles.unitChip, !unit && styles.unitChipSelected]}
+                    onPress={() => setUnit("")}
+                  >
+                    <Text style={[styles.unitChipText, !unit && styles.unitChipTextSelected]}>No unit</Text>
+                  </Pressable>
+                ) : null}
+                {availableIngredientUnits.map((item) => {
                   const isSelected = unit.trim().toLowerCase() === item.toLowerCase();
                   return (
                     <Pressable
@@ -415,6 +653,12 @@ export default function IngredientSearchScreen() {
                   );
                 })}
               </View>
+              {selectedIngredient?.source === "off" ? (
+                <Text style={styles.helperText}>Open Food Facts ingredients support serving when that data exists, or grams for per-100g nutrition.</Text>
+              ) : null}
+              {selectedIngredient?.source === "off" && quantity.trim() && !selectedIngredientNutrition ? (
+                <Text style={styles.errorText}>This Open Food Facts result doesn't have enough nutrition for the selected unit. Try grams.</Text>
+              ) : null}
             </View>
 
             <Pressable
@@ -427,6 +671,8 @@ export default function IngredientSearchScreen() {
                 let normalizedName = selectedIngredient.name.trim();
                 let normalizedUnit = unit.trim();
                 let source: "search" | "custom" = selectedIngredient.source === "custom" ? "custom" : "search";
+                let brand = selectedIngredient.brand;
+                let nutrition = null;
 
                 if (selectedIngredient.source === "custom") {
                   const savedCustom = saveCustomFood(normalizedName, normalizedUnit || "serving");
@@ -437,11 +683,19 @@ export default function IngredientSearchScreen() {
                   }
                 }
 
+                if (selectedIngredient.source === "off" && selectedIngredient.offProduct) {
+                  normalizedUnit = normalizedUnit || getOpenFoodFactsDefaultUnit(selectedIngredient.offProduct);
+                  brand = selectedIngredient.offProduct.brands ?? undefined;
+                  nutrition = selectedIngredientNutrition;
+                }
+
                 addRecipeIngredient({
                   name: normalizedName,
                   quantity: quantity.trim(),
                   unit: normalizedUnit,
+                  brand,
                   source,
+                  nutrition,
                 });
                 clearSelection();
               }}
@@ -454,7 +708,7 @@ export default function IngredientSearchScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Added Ingredients</Text>
           <Text style={styles.sectionText}>
-            Build the full recipe here, then review it once everything looks right.
+            Build the full recipe here, then review or edit it once everything looks right.
           </Text>
 
           {recipeDraft.ingredients.length === 0 ? (
@@ -477,13 +731,13 @@ export default function IngredientSearchScreen() {
                   </View>
                   <View style={styles.itemActionRow}>
                     <Pressable
-                      style={styles.inlineEditButton}
+                      style={styles.itemEditButton}
                       onPress={() => beginIngredientEdit(ingredient.id, ingredient.quantity, ingredient.unit)}
                     >
-                      <Text style={styles.inlineEditButtonText}>Edit</Text>
+                      <Text style={styles.itemEditButtonText}>Edit</Text>
                     </Pressable>
-                    <Pressable style={styles.removeButton} onPress={() => removeRecipeIngredient(ingredient.id)}>
-                      <Text style={styles.removeButtonText}>Remove</Text>
+                    <Pressable style={styles.itemRemoveButton} onPress={() => removeRecipeIngredient(ingredient.id)}>
+                      <Text style={styles.itemRemoveButtonText}>Remove</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -839,17 +1093,17 @@ const styles = StyleSheet.create({
   },
   itemHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
   },
   itemActionRow: {
     flexDirection: "row",
     gap: 8,
+    flexShrink: 0,
   },
   itemTextWrap: {
     flex: 1,
-    marginRight: 12,
   },
   itemTitle: {
     fontSize: 15,
@@ -861,11 +1115,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6b7280",
   },
-  removeButton: {
+  itemEditButton: {
+    backgroundColor: "#dcfce7",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 78,
+  },
+  itemEditButtonText: {
+    color: "#166534",
+    fontWeight: "700",
+  },
+  itemRemoveButton: {
     backgroundColor: "#fee2e2",
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 92,
   },
   inlineIngredientEditor: {
     marginTop: 12,
@@ -875,10 +1145,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
-  removeButtonText: {
+  itemRemoveButtonText: {
     color: "#b91c1c",
     fontWeight: "700",
   },
+  searchButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  searchButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  helperText: {
+    color: "#4b5563",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  resultsSubtitle: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  selectedMeta: {
+    color: "#6b7280",
+    fontSize: 13,
+    marginTop: 4,
+  },
+
   inlineActionRow: {
     flexDirection: "row",
     gap: 10,

@@ -1,7 +1,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMemo, useState } from "react";
-import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Stack, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,24 +13,28 @@ import {
   View,
 } from "react-native";
 
+import { useFocusEffect } from "@react-navigation/native";
+
 import { fieldPlaceholderColor, formatQuantityLabel } from "../display";
 import { commonUnits, type PresetFoodItem } from "../meals-data";
 import { useMeals, type MealDraftItem } from "../meals-context";
+import {
+  adaptImportedNutrition,
+  buildOpenFoodFactsNutrition,
+  getOpenFoodFactsDefaultUnit,
+  parseAmount,
+} from "../nutrition";
 import {
   getAmountError,
   getNamedItemError,
   isValidNamedItem,
   isValidPositiveAmount,
 } from "../validation";
+import {
+  searchOpenFoodFactsPage,
+  type OpenFoodFactsSearchProduct,
+} from "../../../../src/lib/openFoodFacts";
 import { lookupNutrition } from "../../../../src/features/voice-log/services/nutritionLookup";
-import type { NutritionInfo } from "../../../../src/features/voice-log/types/voice";
-
-function parseQty(raw: string): number {
-  const trimmed = raw.trim();
-  const fraction = trimmed.match(/^(\d+)\/(\d+)$/);
-  if (fraction) return parseInt(fraction[1]) / parseInt(fraction[2]);
-  return parseFloat(trimmed) || 1;
-}
 
 type MealMatch =
   | { id: string; name: string; kind: "recipe"; subtitle: string }
@@ -38,8 +43,10 @@ type MealMatch =
 type SelectedFoodState = {
   id: string | null;
   name: string;
-  source: "system" | "custom";
+  source: "system" | "custom" | "off";
   isLibraryItem: boolean;
+  brand?: string;
+  offProduct?: OpenFoodFactsSearchProduct | null;
 };
 
 type CustomEditorState = {
@@ -55,22 +62,35 @@ type SelectedMealPreview = {
   items: { id: string; name: string; quantity: string; unit: string }[];
 } | null;
 
-type CustomMealIngredient = Pick<MealDraftItem, "id" | "name" | "quantity" | "unit"> & {
-  nutrition?: NutritionInfo | null;
-};
+type CustomMealIngredient = Pick<MealDraftItem, "id" | "name" | "quantity" | "unit" | "brand" | "sourceType" | "offProductCode" | "nutrition">;
+
+type AddedItemEditorState = {
+  id: string;
+  quantity: string;
+  unit: string;
+} | null;
+
+type CustomMealItemEditorState = {
+  id: string;
+  quantity: string;
+  unit: string;
+} | null;
 
 export default function AddFoodItemsScreen() {
   const router = useRouter();
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { returnTo, fromBarcode } = useLocalSearchParams<{ returnTo?: string; fromBarcode?: string }>();
   const {
     mealDraft,
     presetFoods,
+    customFoods,
     setMealLogMode,
+    setMealMethod,
     setMealName,
     setMealServingsLogged,
     applyRecipeToMeal,
     applyLoggedMealToDraft,
     addMealItem,
+    updateMealItem,
     removeMealItem,
     saveCustomFood,
     updateCustomFood,
@@ -89,7 +109,31 @@ export default function AddFoodItemsScreen() {
   const [customEditor, setCustomEditor] = useState<CustomEditorState>(null);
   const [attemptedCustomSave, setAttemptedCustomSave] = useState(false);
   const [customMealItems, setCustomMealItems] = useState<CustomMealIngredient[]>([]);
+  const [addedItemEditor, setAddedItemEditor] = useState<AddedItemEditorState>(null);
+  const [attemptedAddedItemSave, setAttemptedAddedItemSave] = useState(false);
+  const [customMealItemEditor, setCustomMealItemEditor] = useState<CustomMealItemEditorState>(null);
+  const [attemptedCustomMealItemSave, setAttemptedCustomMealItemSave] = useState(false);
+  const [foodResults, setFoodResults] = useState<OpenFoodFactsSearchProduct[]>([]);
+  const [foodSearchLoading, setFoodSearchLoading] = useState(false);
+  const [foodSearchLoadingMore, setFoodSearchLoadingMore] = useState(false);
+  const reviewNavigationLockRef = useRef(false);
+  const [foodSearchStatus, setFoodSearchStatus] = useState<string | null>(null);
+  const [hasSearchedFoods, setHasSearchedFoods] = useState(false);
+  const [foodResultsPage, setFoodResultsPage] = useState(1);
+  const [foodResultsHasMore, setFoodResultsHasMore] = useState(false);
+  const [foodResultsQuery, setFoodResultsQuery] = useState("");
   const [lookingUp, setLookingUp] = useState(false);
+
+  const backToMethodTarget = useMemo(() => {
+    if (fromBarcode !== "1") return null;
+    return `${"/meals/log-meal/method"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href;
+  }, [fromBarcode, returnTo]);
+
+  useFocusEffect(
+    useCallback(() => {
+      reviewNavigationLockRef.current = false;
+    }, [])
+  );
 
   const mealMatches = useMemo<MealMatch[]>(() => {
     const normalized = mealSearch.trim().toLowerCase();
@@ -112,6 +156,8 @@ export default function AddFoodItemsScreen() {
     });
 
     loggedMeals.forEach((meal) => {
+      if (meal.logMode !== "meal") return;
+
       const trimmedName = meal.mealName.trim();
       const normalizedName = trimmedName.toLowerCase();
       if (!trimmedName) return;
@@ -130,12 +176,9 @@ export default function AddFoodItemsScreen() {
     return matches.slice(0, 8);
   }, [loggedMeals, mealSearch, savedRecipes]);
 
-  const filteredFoods = useMemo(() => {
+  const filteredPresetFoods = useMemo(() => {
     const normalized = foodSearch.trim().toLowerCase();
-
-    if (!normalized) {
-      return presetFoods.slice(0, 8);
-    }
+    if (!normalized) return presetFoods.slice(0, 8);
 
     return presetFoods.filter((food) => {
       const haystack = [food.name, ...(food.aliases ?? [])].join(" ").toLowerCase();
@@ -143,7 +186,17 @@ export default function AddFoodItemsScreen() {
     });
   }, [foodSearch, presetFoods]);
 
-  const exactFoodMatchExists = useMemo(() => {
+  const filteredCustomFoods = useMemo(() => {
+    const normalized = foodSearch.trim().toLowerCase();
+    if (!normalized) return customFoods.slice(0, 8);
+
+    return customFoods.filter((food) => {
+      const haystack = [food.name, ...(food.aliases ?? [])].join(" ").toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [customFoods, foodSearch]);
+
+  const exactPresetFoodMatchExists = useMemo(() => {
     const normalized = foodSearch.trim().toLowerCase();
     if (!normalized) return false;
 
@@ -152,6 +205,23 @@ export default function AddFoodItemsScreen() {
       return names.includes(normalized);
     });
   }, [foodSearch, presetFoods]);
+
+  const exactCustomFoodMatchExists = useMemo(() => {
+    const normalized = foodSearch.trim().toLowerCase();
+    if (!normalized) return false;
+
+    return customFoods.some((food) => {
+      const names = [food.name, ...(food.aliases ?? [])].map((entry) => entry.toLowerCase());
+      return names.includes(normalized);
+    });
+  }, [customFoods, foodSearch]);
+
+  const exactOffFoodMatchExists = useMemo(() => {
+    const normalized = foodSearch.trim().toLowerCase();
+    if (!normalized) return false;
+
+    return foodResults.some((food) => food.product_name.trim().toLowerCase() === normalized);
+  }, [foodResults, foodSearch]);
 
   const exactMealMatchExists = useMemo(() => {
     const normalized = mealSearch.trim().toLowerCase();
@@ -196,12 +266,27 @@ export default function AddFoodItemsScreen() {
     return null;
   }, [loggedMeals, mealDraft.mealSourceId, mealDraft.mealSourceType, savedRecipes, selectedMealExists]);
 
+  const selectedFoodNutrition = useMemo(() => {
+    if (selectedFood?.source !== "off" || !selectedFood.offProduct) return null;
+
+    return buildOpenFoodFactsNutrition(
+      selectedFood.offProduct,
+      quantity,
+      unit.trim() || getOpenFoodFactsDefaultUnit(selectedFood.offProduct)
+    );
+  }, [quantity, selectedFood, unit]);
+
+  const availableFoodUnits = selectedFood?.source === "off" ? (["serving", "g"] as const) : commonUnits;
+
   const canCreateCustomFood =
     !selectedFood &&
     foodSearch.trim().length > 0 &&
     isValidNamedItem(foodSearch.trim()) &&
-    filteredFoods.length === 0 &&
-    !exactFoodMatchExists;
+    filteredPresetFoods.length === 0 &&
+    filteredCustomFoods.length === 0 &&
+    !exactPresetFoodMatchExists &&
+    !exactCustomFoodMatchExists &&
+    !exactOffFoodMatchExists;
 
   const canCreateCustomMeal =
     mealDraft.logMode === "meal" &&
@@ -211,7 +296,7 @@ export default function AddFoodItemsScreen() {
     !exactMealMatchExists;
 
   const quantityIsValid = isValidPositiveAmount(quantity);
-  const canAddItem = !!selectedFood?.name.trim() && quantityIsValid;
+  const canAddItem = !!selectedFood?.name.trim() && quantityIsValid && (selectedFood?.source !== "off" || !!selectedFoodNutrition);
   const customMealSelected = mealDraft.logMode === "meal" && mealDraft.mealSourceType === "custom" && mealDraft.mealName.trim().length > 0;
   const servingsLoggedValid = !(selectedMealExists || customMealSelected) || isValidPositiveAmount(mealDraft.servingsLogged || "1");
   const canAddSelectedMeal = (selectedMealExists || customMealSelected) && servingsLoggedValid && (selectedMealExists || customMealItems.length > 0);
@@ -222,6 +307,14 @@ export default function AddFoodItemsScreen() {
     ? getAmountError(mealDraft.servingsLogged || "", "Servings")
     : "";
   const customEditorError = attemptedCustomSave && customEditor ? getNamedItemError(customEditor.name, "Custom item name") : "";
+  const addedItemQuantityError = attemptedAddedItemSave && addedItemEditor
+    ? getAmountError(addedItemEditor.quantity)
+    : "";
+  const canSaveAddedItemEdit = !!addedItemEditor && isValidPositiveAmount(addedItemEditor.quantity);
+  const customMealItemQuantityError = attemptedCustomMealItemSave && customMealItemEditor
+    ? getAmountError(customMealItemEditor.quantity)
+    : "";
+  const canSaveCustomMealItemEdit = !!customMealItemEditor && isValidPositiveAmount(customMealItemEditor.quantity);
 
   const summaryName = mealDraft.mealName.trim()
     || (mealDraft.items.length === 1
@@ -242,6 +335,68 @@ export default function AddFoodItemsScreen() {
     setAttemptedAdd(false);
     setCustomEditor(null);
     setAttemptedCustomSave(false);
+    setFoodResults([]);
+    setFoodSearchLoading(false);
+    setFoodSearchStatus(null);
+    setHasSearchedFoods(false);
+    setLookingUp(false);
+  };
+
+  const cancelAddedItemEdit = () => {
+    setAddedItemEditor(null);
+    setAttemptedAddedItemSave(false);
+  };
+
+  const beginAddedItemEdit = (item: MealDraftItem) => {
+    setAddedItemEditor({
+      id: item.id,
+      quantity: item.quantity,
+      unit: item.unit,
+    });
+    setAttemptedAddedItemSave(false);
+  };
+
+  const saveAddedItemEdit = () => {
+    setAttemptedAddedItemSave(true);
+    if (!addedItemEditor || !canSaveAddedItemEdit) return;
+
+    updateMealItem(addedItemEditor.id, {
+      quantity: addedItemEditor.quantity.trim(),
+      unit: addedItemEditor.unit.trim(),
+    });
+    cancelAddedItemEdit();
+  };
+
+  const cancelCustomMealItemEdit = () => {
+    setCustomMealItemEditor(null);
+    setAttemptedCustomMealItemSave(false);
+  };
+
+  const beginCustomMealItemEdit = (item: CustomMealIngredient) => {
+    setCustomMealItemEditor({
+      id: item.id,
+      quantity: item.quantity,
+      unit: item.unit,
+    });
+    setAttemptedCustomMealItemSave(false);
+  };
+
+  const saveCustomMealItemEdit = () => {
+    setAttemptedCustomMealItemSave(true);
+    if (!customMealItemEditor || !canSaveCustomMealItemEdit) return;
+
+    setCustomMealItems((prev) =>
+      prev.map((item) =>
+        item.id === customMealItemEditor.id
+          ? {
+              ...item,
+              quantity: customMealItemEditor.quantity.trim(),
+              unit: customMealItemEditor.unit.trim(),
+            }
+          : item
+      )
+    );
+    cancelCustomMealItemEdit();
   };
 
   const selectFood = (item: PresetFoodItem) => {
@@ -250,6 +405,7 @@ export default function AddFoodItemsScreen() {
       name: item.name,
       source: item.source,
       isLibraryItem: true,
+      offProduct: null,
     });
     setFoodSearch(item.name);
     setAttemptedAdd(false);
@@ -259,6 +415,25 @@ export default function AddFoodItemsScreen() {
     setAttemptedCustomSave(false);
   };
 
+  const selectOffFood = (product: OpenFoodFactsSearchProduct) => {
+    const normalizedName = product.product_name.trim();
+    setSelectedFood({
+      id: product.code,
+      name: normalizedName,
+      source: "off",
+      isLibraryItem: false,
+      brand: product.brands ?? undefined,
+      offProduct: product,
+    });
+    setFoodSearch(normalizedName);
+    setAttemptedAdd(false);
+    setQuantity("");
+    setUnit(getOpenFoodFactsDefaultUnit(product));
+    setCustomEditor(null);
+    setAttemptedCustomSave(false);
+    setFoodSearchStatus(null);
+  };
+
   const selectCustomFood = () => {
     const trimmedName = foodSearch.trim();
     setSelectedFood({
@@ -266,6 +441,7 @@ export default function AddFoodItemsScreen() {
       name: trimmedName,
       source: "custom",
       isLibraryItem: false,
+      offProduct: null,
     });
     setFoodSearch(trimmedName);
     setAttemptedAdd(false);
@@ -296,6 +472,7 @@ export default function AddFoodItemsScreen() {
     setMealSearch("");
     setMealServingsLogged("1");
     setCustomMealItems([]);
+    cancelCustomMealItemEdit();
     resetFoodEntry();
   };
 
@@ -317,33 +494,14 @@ export default function AddFoodItemsScreen() {
     }
 
     if (customMealSelected && customMealItems.length > 0) {
-      const hasNutrition = customMealItems.some((i) => i.nutrition?.calories != null);
-      const summed = hasNutrition
-        ? customMealItems.reduce(
-            (acc, i) => ({
-              calories: acc.calories + (i.nutrition?.calories ?? 0),
-              protein:  acc.protein  + (i.nutrition?.protein  ?? 0),
-              carbs:    acc.carbs    + (i.nutrition?.carbs    ?? 0),
-              fat:      acc.fat      + (i.nutrition?.fat      ?? 0),
-            }),
-            { calories: 0, protein: 0, carbs: 0, fat: 0 }
-          )
-        : null;
-
       addMealItem({
         name: mealDraft.mealName.trim(),
         quantity: mealDraft.servingsLogged.trim() || "1",
         unit: "serving",
         entryKind: "meal",
-        nestedItems: customMealItems.map(({ id, name, quantity, unit }) => ({ id, name, quantity, unit })),
+        nestedItems: customMealItems.map((item) => ({ ...item })),
         mealSourceType: "custom",
         mealSourceId: null,
-        ...(summed && {
-          calories: Math.round(summed.calories),
-          protein:  Math.round(summed.protein  * 10) / 10,
-          carbs:    Math.round(summed.carbs    * 10) / 10,
-          fat:      Math.round(summed.fat      * 10) / 10,
-        }),
       });
       clearSelectedMeal();
     }
@@ -357,6 +515,14 @@ export default function AddFoodItemsScreen() {
     setAttemptedAdd(false);
     setCustomEditor(null);
     setAttemptedCustomSave(false);
+    setFoodResults([]);
+    setFoodSearchLoading(false);
+    setFoodSearchLoadingMore(false);
+    setFoodSearchStatus(null);
+    setHasSearchedFoods(false);
+    setFoodResultsPage(1);
+    setFoodResultsHasMore(false);
+    setFoodResultsQuery("");
   };
 
   const startCustomEditor = (item: PresetFoodItem) => {
@@ -404,8 +570,102 @@ export default function AddFoodItemsScreen() {
     }
   };
 
+  const handleFoodSearch = async () => {
+    const trimmedQuery = foodSearch.trim();
+
+    if (trimmedQuery.length < 3) {
+      setFoodResults([]);
+      setHasSearchedFoods(false);
+      setFoodResultsPage(1);
+      setFoodResultsHasMore(false);
+      setFoodResultsQuery("");
+      setFoodSearchStatus("Enter at least 3 characters before searching Open Food Facts.");
+      return;
+    }
+
+    setFoodSearchLoading(true);
+    setFoodSearchStatus(null);
+    setHasSearchedFoods(true);
+
+    try {
+      const resultPage = await searchOpenFoodFactsPage(trimmedQuery, 1, 8);
+      setFoodResults(resultPage.products);
+      setFoodResultsPage(resultPage.page);
+      setFoodResultsHasMore(resultPage.hasMore);
+      setFoodResultsQuery(trimmedQuery);
+
+      if (resultPage.products.length === 0) {
+        setFoodSearchStatus(
+          filteredCustomFoods.length > 0
+            ? "No Open Food Facts matches found. Matching custom items are shown below."
+            : "No Open Food Facts matches found. You can create a custom item below."
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("RATE_LIMIT:")) {
+        const waitMs = Number(message.split(":")[1] ?? 0);
+        const waitSeconds = Math.max(1, Math.ceil(waitMs / 1000));
+        setFoodSearchStatus(`Search limit reached. Wait about ${waitSeconds}s and try again.`);
+      } else {
+        setFoodSearchStatus("We couldn't reach Open Food Facts right now. Please try again.");
+      }
+      setFoodResults([]);
+      setFoodResultsPage(1);
+      setFoodResultsHasMore(false);
+      setFoodResultsQuery("");
+    } finally {
+      setFoodSearchLoading(false);
+    }
+  };
+
+  const handleLoadMoreFoods = async () => {
+    if (!foodResultsHasMore || foodSearchLoadingMore || !foodResultsQuery) return;
+
+    setFoodSearchLoadingMore(true);
+    setFoodSearchStatus(null);
+    try {
+      const nextPage = foodResultsPage + 1;
+      const resultPage = await searchOpenFoodFactsPage(foodResultsQuery, nextPage, 8);
+      setFoodResults((prev) => {
+        const seenCodes = new Set(prev.map((item) => item.code));
+        const appended = resultPage.products.filter((item) => !seenCodes.has(item.code));
+        return [...prev, ...appended];
+      });
+      setFoodResultsPage(resultPage.page);
+      setFoodResultsHasMore(resultPage.hasMore);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("RATE_LIMIT:")) {
+        const waitMs = Number(message.split(":")[1] ?? 0);
+        const waitSeconds = Math.max(1, Math.ceil(waitMs / 1000));
+        setFoodSearchStatus(`Search limit reached. Wait about ${waitSeconds}s and try again.`);
+      } else {
+        setFoodSearchStatus("We couldn't load more Open Food Facts results right now. Please try again.");
+      }
+    } finally {
+      setFoodSearchLoadingMore(false);
+    }
+  };
+
   return (
-    <KeyboardAvoidingView
+    <>
+      <Stack.Screen
+        options={{
+          headerLeft: backToMethodTarget
+            ? () => (
+                <Pressable
+                  onPress={() => router.replace(backToMethodTarget)}
+                  accessibilityRole="button"
+                  style={{ marginLeft: 4, paddingHorizontal: 8, paddingVertical: 6 }}
+                >
+                  <Ionicons name="chevron-back" size={26} color="#111827" />
+                </Pressable>
+              )
+            : undefined,
+        }}
+      />
+      <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={96}
@@ -456,7 +716,7 @@ export default function AddFoodItemsScreen() {
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Meal</Text>
             <Text style={styles.sectionText}>
-              Search for a saved meal. If it isn&apos;t found, create a new meal and add its items.
+              Search for a saved meal. If it isn't found, create a new meal and add its items.
             </Text>
 
             <TextInput
@@ -567,16 +827,19 @@ export default function AddFoodItemsScreen() {
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Food Item</Text>
             <Text style={styles.sectionText}>
-              Search for a food item. If it isn&apos;t found, create a custom item.
+              Search Open Food Facts when you want nutrition data, or create and reuse your own custom items.
             </Text>
 
             <TextInput
               style={styles.input}
-              placeholder="Search foods like banana, egg, or rice"
+              placeholder="Search foods like salt, bread, or yogurt"
               placeholderTextColor={fieldPlaceholderColor}
               value={foodSearch}
               onChangeText={(value) => {
                 setFoodSearch(value);
+                setFoodResults([]);
+                setHasSearchedFoods(false);
+                setFoodSearchStatus(null);
                 if (selectedFood && value.trim() !== selectedFood.name.trim()) {
                   setSelectedFood(null);
                   setQuantity("");
@@ -585,12 +848,26 @@ export default function AddFoodItemsScreen() {
               }}
             />
 
+            {!selectedFood?.name.trim() ? (
+              <Pressable
+                style={[styles.searchButton, foodSearchLoading && styles.buttonDisabled]}
+                onPress={handleFoodSearch}
+                disabled={foodSearchLoading}
+              >
+                {foodSearchLoading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.searchButtonText}>Search Open Food Facts</Text>}
+              </Pressable>
+            ) : null}
+
             {selectedFood?.name.trim() ? (
               <View style={styles.selectedCard}>
                 <View style={styles.selectedHeaderRow}>
                   <View style={styles.selectedTextWrap}>
                     <Text style={styles.selectedLabel}>Selected food</Text>
                     <Text style={styles.selectedValue}>{selectedFood.name.trim()}</Text>
+                    {selectedFood.brand ? <Text style={styles.selectedMeta}>{selectedFood.brand}</Text> : null}
+                    {selectedFood.source === "off" && selectedFood.offProduct?.serving_size ? (
+                      <Text style={styles.selectedMeta}>Serving size: {selectedFood.offProduct.serving_size}</Text>
+                    ) : null}
                   </View>
                   <Pressable onPress={clearSelectedFood}>
                     <Text style={styles.changeLink}>Change</Text>
@@ -639,7 +916,7 @@ export default function AddFoodItemsScreen() {
                       <Pressable
                         style={styles.inlineEditButton}
                         onPress={() => {
-                          const customItem = presetFoods.find((item) => item.id === selectedFood.id);
+                          const customItem = customFoods.find((item) => item.id === selectedFood.id);
                           if (customItem) startCustomEditor(customItem);
                         }}
                       >
@@ -648,7 +925,7 @@ export default function AddFoodItemsScreen() {
                       <Pressable
                         style={styles.inlineDeleteButton}
                         onPress={() => {
-                          const customItem = presetFoods.find((item) => item.id === selectedFood.id);
+                          const customItem = customFoods.find((item) => item.id === selectedFood.id);
                           if (customItem) handleRemoveCustomFood(customItem);
                         }}
                       >
@@ -660,31 +937,85 @@ export default function AddFoodItemsScreen() {
               </View>
             ) : (
               <View style={styles.resultsBlock}>
-                <Text style={styles.resultsTitle}>Food matches</Text>
+                <Text style={styles.resultsTitle}>Search results</Text>
+                <Text style={styles.sectionText}>Use preset foods for quick logging, search Open Food Facts when you want broader product data, or reuse your custom items below.</Text>
 
-                {filteredFoods.length === 0 ? (
-                  <View style={styles.emptyMatchCard}>
-                    <Text style={styles.emptyMatchTitle}>No foods found</Text>
-                    <Text style={styles.emptyMatchText}>
-                      Create a custom item below if needed.
-                    </Text>
-                  </View>
-                ) : (
-                  filteredFoods.map((food) => (
-                    <View key={food.id} style={styles.resultRow}>
-                      <Pressable style={styles.resultPressable} onPress={() => selectFood(food)}>
-                        <View style={styles.resultTextWrap}>
-                          <Text style={styles.resultTitle}>{food.name}</Text>
-                          <Text style={styles.resultSubtitle}>
-                            Suggested unit: {food.suggestedUnit}
-                            {food.source === "custom" ? " • custom" : ""}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                {foodSearchStatus ? <Text style={styles.helperText}>{foodSearchStatus}</Text> : null}
+
+                {filteredPresetFoods.length > 0 ? (
+                  <>
+                    <Text style={styles.resultsSubtitle}>Preset foods</Text>
+                    {filteredPresetFoods.map((food) => (
+                      <View key={food.id} style={styles.resultRow}>
+                        <Pressable style={styles.resultPressable} onPress={() => selectFood(food)}>
+                          <View style={styles.resultTextWrap}>
+                            <Text style={styles.resultTitle}>{food.name}</Text>
+                            <Text style={styles.resultSubtitle}>Suggested unit: {food.suggestedUnit} • preset</Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+
+                {hasSearchedFoods && !foodSearchLoading && foodResults.length > 0 ? (
+                  <>
+                    <Text style={styles.resultsSubtitle}>Open Food Facts results</Text>
+                    {foodResults.map((food) => (
+                      <View key={food.code} style={styles.resultRow}>
+                        <Pressable style={styles.resultPressable} onPress={() => selectOffFood(food)}>
+                          <View style={styles.resultTextWrap}>
+                            <Text style={styles.resultTitle}>{food.product_name}</Text>
+                            <Text style={styles.resultSubtitle}>
+                              {food.brands ? `${food.brands} • ` : ""}
+                              Default unit: {getOpenFoodFactsDefaultUnit(food)}
+                              {food.serving_size ? ` • ${food.serving_size}` : ""}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                        </Pressable>
+                      </View>
+                    ))}
+                    {foodResultsHasMore ? (
+                      <Pressable
+                        style={[styles.searchButton, foodSearchLoadingMore && styles.buttonDisabled]}
+                        onPress={handleLoadMoreFoods}
+                        disabled={foodSearchLoadingMore}
+                      >
+                        {foodSearchLoadingMore ? (
+                          <ActivityIndicator color="#ffffff" />
+                        ) : (
+                          <Text style={styles.searchButtonText}>Show More</Text>
+                        )}
                       </Pressable>
-                    </View>
-                  ))
-                )}
+                    ) : null}
+                  </>
+                ) : null}
+
+                {filteredCustomFoods.length > 0 ? (
+                  <>
+                    <Text style={styles.resultsSubtitle}>Your custom items</Text>
+                    {filteredCustomFoods.map((food) => (
+                      <View key={food.id} style={styles.resultRow}>
+                        <Pressable style={styles.resultPressable} onPress={() => selectFood(food)}>
+                          <View style={styles.resultTextWrap}>
+                            <Text style={styles.resultTitle}>{food.name}</Text>
+                            <Text style={styles.resultSubtitle}>Suggested unit: {food.suggestedUnit} • custom</Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+
+                {!foodSearchLoading && hasSearchedFoods && foodResults.length === 0 && filteredPresetFoods.length === 0 && filteredCustomFoods.length === 0 ? (
+                  <View style={styles.emptyMatchCard}>
+                    <Text style={styles.emptyMatchTitle}>No results found</Text>
+                    <Text style={styles.emptyMatchText}>Create a custom item below if Open Food Facts doesn't have what you need.</Text>
+                  </View>
+                ) : null}
 
                 {canCreateCustomFood ? (
                   <Pressable style={styles.customButton} onPress={selectCustomFood}>
@@ -729,13 +1060,15 @@ export default function AddFoodItemsScreen() {
               ) : null}
 
               <View style={styles.unitChips}>
-                <Pressable
-                  style={[styles.unitChip, !unit && styles.unitChipSelected]}
-                  onPress={() => setUnit("")}
-                >
-                  <Text style={[styles.unitChipText, !unit && styles.unitChipTextSelected]}>No unit</Text>
-                </Pressable>
-                {commonUnits.map((item) => {
+                {selectedFood?.source !== "off" ? (
+                  <Pressable
+                    style={[styles.unitChip, !unit && styles.unitChipSelected]}
+                    onPress={() => setUnit("")}
+                  >
+                    <Text style={[styles.unitChipText, !unit && styles.unitChipTextSelected]}>No unit</Text>
+                  </Pressable>
+                ) : null}
+                {availableFoodUnits.map((item) => {
                   const isSelected = unit.trim().toLowerCase() === item.toLowerCase();
                   return (
                     <Pressable
@@ -748,6 +1081,12 @@ export default function AddFoodItemsScreen() {
                   );
                 })}
               </View>
+              {selectedFood?.source === "off" ? (
+                <Text style={styles.helperText}>Open Food Facts items support serving when that data exists, or grams for per-100g nutrition.</Text>
+              ) : null}
+              {selectedFood?.source === "off" && quantity.trim() && !selectedFoodNutrition ? (
+                <Text style={styles.errorText}>This Open Food Facts result doesn't have enough nutrition for the selected unit. Try grams.</Text>
+              ) : null}
             </View>
 
             <Pressable
@@ -759,6 +1098,10 @@ export default function AddFoodItemsScreen() {
 
                 let normalizedName = selectedFood.name.trim();
                 let normalizedUnit = unit.trim();
+                let brand = selectedFood.brand;
+                let sourceType: MealDraftItem["sourceType"] = "manual";
+                let offProductCode: string | null | undefined;
+                let nutrition: MealDraftItem["nutrition"] | null = null;
 
                 if (selectedFood.source === "custom") {
                   const savedCustom = saveCustomFood(normalizedName, normalizedUnit || "serving");
@@ -768,13 +1111,29 @@ export default function AddFoodItemsScreen() {
                   }
                 }
 
-                setLookingUp(true);
-                const nutrition = await lookupNutrition(
-                  normalizedName,
-                  parseQty(quantity),
-                  normalizedUnit || null
-                );
-                setLookingUp(false);
+                if (selectedFood.source === "off" && selectedFood.offProduct) {
+                  normalizedUnit = normalizedUnit || getOpenFoodFactsDefaultUnit(selectedFood.offProduct);
+                  nutrition = selectedFoodNutrition;
+                  sourceType = "off";
+                  offProductCode = selectedFood.offProduct.code;
+                  brand = selectedFood.offProduct.brands ?? undefined;
+                } else {
+                  setLookingUp(true);
+                  try {
+                    const lookedUp = await lookupNutrition(
+                      normalizedName,
+                      parseAmount(quantity),
+                      normalizedUnit || null
+                    );
+                    const adapted = adaptImportedNutrition(lookedUp);
+                    nutrition = adapted;
+                    if (!brand && adapted?.brand) {
+                      brand = adapted.brand ?? undefined;
+                    }
+                  } finally {
+                    setLookingUp(false);
+                  }
+                }
 
                 if (customMealSelected) {
                   setCustomMealItems((prev) => [
@@ -784,33 +1143,26 @@ export default function AddFoodItemsScreen() {
                       name: normalizedName,
                       quantity: quantity.trim(),
                       unit: normalizedUnit,
+                      brand,
+                      sourceType,
+                      offProductCode,
                       nutrition,
                     },
                   ]);
                 } else {
+                  if (selectedFood.source === "off") {
+                    setMealMethod("Open Food Facts Search");
+                  }
+
                   addMealItem({
                     name: normalizedName,
+                    brand,
                     quantity: quantity.trim(),
                     unit: normalizedUnit,
                     entryKind: "single",
-                    calories:                  nutrition?.calories,
-                    protein:                   nutrition?.protein,
-                    carbs:                     nutrition?.carbs,
-                    fat:                       nutrition?.fat,
-                    saturated_fat:             nutrition?.saturated_fat,
-                    sugars:                    nutrition?.sugars,
-                    fiber:                     nutrition?.fiber,
-                    salt:                      nutrition?.salt,
-                    sodium:                    nutrition?.sodium,
-                    serving_size:              nutrition?.serving_size,
-                    brand:                     nutrition?.brand,
-                    nova_group:                nutrition?.nova_group,
-                    nutriscore_grade:          nutrition?.nutriscore_grade,
-                    additives_tags:            nutrition?.additives_tags,
-                    allergens_tags:            nutrition?.allergens_tags,
-                    ingredients_analysis_tags: nutrition?.ingredients_analysis_tags,
-                    nutrient_levels:           nutrition?.nutrient_levels,
-                    ingredients_text:          nutrition?.ingredients_text,
+                    sourceType,
+                    offProductCode,
+                    nutrition,
                   });
                 }
                 resetFoodEntry();
@@ -841,16 +1193,84 @@ export default function AddFoodItemsScreen() {
               ) : (
                 customMealItems.map((item) => (
                   <View key={item.id} style={styles.itemRow}>
-                    <View style={styles.itemTextWrap}>
-                      <Text style={styles.itemTitle}>{item.name}</Text>
-                      <Text style={styles.itemSubtitle}>{formatQuantityLabel(item.quantity, item.unit)}</Text>
+                    <View style={styles.itemHeaderRow}>
+                      <View style={styles.itemTextWrap}>
+                        <Text style={styles.itemTitle}>{item.name}</Text>
+                        <Text style={styles.itemSubtitle}>{formatQuantityLabel(item.quantity, item.unit)}</Text>
+                      </View>
+
+                      <View style={styles.itemActionRow}>
+                        <Pressable
+                          style={styles.itemEditButton}
+                          onPress={() => beginCustomMealItemEdit(item)}
+                        >
+                          <Text style={styles.itemEditButtonText}>Edit</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.itemRemoveButton}
+                          onPress={() => {
+                            if (customMealItemEditor?.id === item.id) {
+                              cancelCustomMealItemEdit();
+                            }
+                            setCustomMealItems((prev) => prev.filter((entry) => entry.id !== item.id));
+                          }}
+                        >
+                          <Text style={styles.itemRemoveButtonText}>Remove</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                    <Pressable
-                      style={styles.removeButton}
-                      onPress={() => setCustomMealItems((prev) => prev.filter((entry) => entry.id !== item.id))}
-                    >
-                      <Text style={styles.removeButtonText}>Remove</Text>
-                    </Pressable>
+
+                    {customMealItemEditor?.id === item.id ? (
+                      <View style={styles.inlineItemEditor}>
+                        <Text style={styles.editorLabel}>Quantity</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="e.g. 1, 1/2, or 2"
+                          placeholderTextColor={fieldPlaceholderColor}
+                          value={customMealItemEditor.quantity}
+                          onChangeText={(value) =>
+                            setCustomMealItemEditor((prev) => (prev ? { ...prev, quantity: value } : prev))
+                          }
+                          keyboardType="numbers-and-punctuation"
+                        />
+                        {customMealItemQuantityError ? <Text style={styles.errorText}>{customMealItemQuantityError}</Text> : null}
+
+                        <Text style={styles.editorLabel}>Unit</Text>
+                        <View style={styles.unitChips}>
+                          <Pressable
+                            style={[styles.unitChip, !customMealItemEditor.unit && styles.unitChipSelected]}
+                            onPress={() =>
+                              setCustomMealItemEditor((prev) => (prev ? { ...prev, unit: "" } : prev))
+                            }
+                          >
+                            <Text style={[styles.unitChipText, !customMealItemEditor.unit && styles.unitChipTextSelected]}>No unit</Text>
+                          </Pressable>
+                          {commonUnits.map((chipUnit) => {
+                            const isSelected = customMealItemEditor.unit.trim().toLowerCase() === chipUnit.toLowerCase();
+                            return (
+                              <Pressable
+                                key={`${item.id}-${chipUnit}`}
+                                style={[styles.unitChip, isSelected && styles.unitChipSelected]}
+                                onPress={() =>
+                                  setCustomMealItemEditor((prev) => (prev ? { ...prev, unit: chipUnit } : prev))
+                                }
+                              >
+                                <Text style={[styles.unitChipText, isSelected && styles.unitChipTextSelected]}>{chipUnit}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+
+                        <View style={styles.editorButtonRow}>
+                          <Pressable style={styles.inlineEditButton} onPress={saveCustomMealItemEdit}>
+                            <Text style={styles.inlineEditButtonText}>Save</Text>
+                          </Pressable>
+                          <Pressable style={styles.inlineDeleteButton} onPress={cancelCustomMealItemEdit}>
+                            <Text style={styles.inlineDeleteButtonText}>Cancel</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               )}
@@ -882,7 +1302,7 @@ export default function AddFoodItemsScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Added Items</Text>
           <Text style={styles.sectionText}>
-            Review what you&apos;ve added so far. Remove anything you don&apos;t want before finishing.
+            Review and edit what you've added so far. Remove anything you don't want before finishing.
           </Text>
 
           {mealDraft.items.length === 0 ? (
@@ -895,16 +1315,92 @@ export default function AddFoodItemsScreen() {
           ) : (
             mealDraft.items.map((item) => (
               <View key={item.id} style={styles.itemRow}>
-                <View style={styles.itemTextWrap}>
-                  <Text style={styles.itemTitle}>{item.name}</Text>
-                  <Text style={styles.itemSubtitle}>
-                    {formatQuantityLabel(item.quantity, item.unit)}
-                    {item.entryKind === "meal" && item.nestedItems?.length ? ` • ${item.nestedItems.length} item${item.nestedItems.length === 1 ? "" : "s"}` : ""}
-                  </Text>
+                <View style={styles.itemHeaderRow}>
+                  <View style={styles.itemTextWrap}>
+                    <Text style={styles.itemTitle}>{item.name}</Text>
+                    <Text style={styles.itemSubtitle}>
+                      {formatQuantityLabel(item.quantity, item.unit)}
+                      {item.entryKind === "meal" && item.nestedItems?.length ? ` • ${item.nestedItems.length} item${item.nestedItems.length === 1 ? "" : "s"}` : ""}
+                    </Text>
+                  </View>
+
+                  <View style={styles.itemActionRow}>
+                    <Pressable style={styles.itemEditButton} onPress={() => beginAddedItemEdit(item)}>
+                      <Text style={styles.itemEditButtonText}>Edit</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.itemRemoveButton}
+                      onPress={() => {
+                        if (addedItemEditor?.id === item.id) {
+                          cancelAddedItemEdit();
+                        }
+                        removeMealItem(item.id);
+                      }}
+                    >
+                      <Text style={styles.itemRemoveButtonText}>Remove</Text>
+                    </Pressable>
+                  </View>
                 </View>
-                <Pressable style={styles.removeButton} onPress={() => removeMealItem(item.id)}>
-                  <Text style={styles.removeButtonText}>Remove</Text>
-                </Pressable>
+
+                {item.entryKind === "meal" && item.nestedItems?.length ? (
+                  <View style={styles.nestedList}>
+                    {item.nestedItems.map((nestedItem) => (
+                      <Text key={nestedItem.id} style={styles.nestedItemText}>
+                        • {nestedItem.name} — {formatQuantityLabel(nestedItem.quantity, nestedItem.unit)}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+
+                {addedItemEditor?.id === item.id ? (
+                  <View style={styles.inlineItemEditor}>
+                    <Text style={styles.editorLabel}>Quantity</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. 1, 1/2, or 2"
+                      placeholderTextColor={fieldPlaceholderColor}
+                      value={addedItemEditor.quantity}
+                      onChangeText={(value) =>
+                        setAddedItemEditor((prev) => (prev ? { ...prev, quantity: value } : prev))
+                      }
+                      keyboardType="numbers-and-punctuation"
+                    />
+                    {addedItemQuantityError ? <Text style={styles.errorText}>{addedItemQuantityError}</Text> : null}
+
+                    <Text style={styles.editorLabel}>Unit</Text>
+                    <View style={styles.unitChips}>
+                      <Pressable
+                        style={[styles.unitChip, !addedItemEditor.unit && styles.unitChipSelected]}
+                        onPress={() => setAddedItemEditor((prev) => (prev ? { ...prev, unit: "" } : prev))}
+                      >
+                        <Text style={[styles.unitChipText, !addedItemEditor.unit && styles.unitChipTextSelected]}>No unit</Text>
+                      </Pressable>
+                      {commonUnits.map((chipUnit) => {
+                        const isSelected = addedItemEditor.unit.trim().toLowerCase() === chipUnit.toLowerCase();
+                        return (
+                          <Pressable
+                            key={`${item.id}-${chipUnit}`}
+                            style={[styles.unitChip, isSelected && styles.unitChipSelected]}
+                            onPress={() =>
+                              setAddedItemEditor((prev) => (prev ? { ...prev, unit: chipUnit } : prev))
+                            }
+                          >
+                            <Text style={[styles.unitChipText, isSelected && styles.unitChipTextSelected]}>{chipUnit}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    <View style={styles.editorButtonRow}>
+                      <Pressable style={styles.inlineEditButton} onPress={saveAddedItemEdit}>
+                        <Text style={styles.inlineEditButtonText}>Save</Text>
+                      </Pressable>
+                      <Pressable style={styles.inlineDeleteButton} onPress={cancelAddedItemEdit}>
+                        <Text style={styles.inlineDeleteButtonText}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             ))
           )}
@@ -913,16 +1409,18 @@ export default function AddFoodItemsScreen() {
         <Pressable
           style={[styles.doneButton, !canFinish && styles.buttonDisabled]}
           disabled={!canFinish}
-          onPress={() =>
-            router.push(
-              `${"/meals/log-meal/review"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href
-            )
-          }
+          onPress={() => {
+            if (!canFinish || reviewNavigationLockRef.current) return;
+            reviewNavigationLockRef.current = true;
+            const target = `${"/meals/log-meal/review"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+            router.navigate(target as Href);
+          }}
         >
           <Text style={[styles.primaryButtonText, !canFinish && styles.buttonTextDisabled]}>Done</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -944,6 +1442,11 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     lineHeight: 22,
     marginBottom: 20,
+  },
+  topActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
   },
   summaryCard: {
     backgroundColor: "#111827",
@@ -1272,16 +1775,24 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   itemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: "#f3f4f6",
+    gap: 12,
+  },
+  itemHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  itemActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexShrink: 0,
   },
   itemTextWrap: {
     flex: 1,
-    marginRight: 12,
   },
   itemTitle: {
     fontSize: 15,
@@ -1293,15 +1804,80 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6b7280",
   },
-  removeButton: {
+  itemEditButton: {
+    backgroundColor: "#dcfce7",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 78,
+  },
+  itemEditButtonText: {
+    color: "#166534",
+    fontWeight: "700",
+  },
+  itemRemoveButton: {
     backgroundColor: "#fee2e2",
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 92,
   },
-  removeButtonText: {
+  itemRemoveButtonText: {
     color: "#b91c1c",
     fontWeight: "700",
+  },
+  searchButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  searchButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  helperText: {
+    color: "#4b5563",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  resultsSubtitle: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  selectedMeta: {
+    color: "#6b7280",
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  nestedList: {
+    marginTop: -2,
+    paddingLeft: 4,
+  },
+  nestedItemText: {
+    fontSize: 13,
+    color: "#4b5563",
+    lineHeight: 19,
+    marginBottom: 2,
+  },
+  inlineItemEditor: {
+    marginTop: 4,
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
   inlineActionRow: {
     flexDirection: "row",

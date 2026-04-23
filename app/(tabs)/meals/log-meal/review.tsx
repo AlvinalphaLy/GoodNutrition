@@ -1,45 +1,80 @@
-import { useMemo } from "react";
-import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useMemo, useRef } from "react";
+import { Redirect, Stack, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { scoreMeal, gradeColor } from "../eatScore";
 
+import { useProfile } from "../../../context/profileContext";
 import { formatQuantityLabel } from "../display";
 import { useMeals } from "../meals-context";
+import { buildScoreSummary, summarizeNutritionEntries } from "../nutrition";
 
 const NUTRISCORE_COLOR: Record<string, string> = {
-  a: "#038141", b: "#85BB2F", c: "#FECB02", d: "#EE8100", e: "#E63312",
+  a: "#038141",
+  b: "#85BB2F",
+  c: "#FECB02",
+  d: "#EE8100",
+  e: "#E63312",
 };
 
 const NOVA_COLOR: Record<number, string> = {
-  1: "#038141", 2: "#85BB2F", 3: "#EE8100", 4: "#E63312",
+  1: "#038141",
+  2: "#85BB2F",
+  3: "#EE8100",
+  4: "#E63312",
 };
 
 const NOVA_LABEL: Record<number, string> = {
-  1: "Unprocessed", 2: "Culinary ingredient", 3: "Processed", 4: "Ultra-processed",
+  1: "Unprocessed",
+  2: "Culinary ingredient",
+  3: "Processed",
+  4: "Ultra-processed",
 };
 
 function formatTag(tag: string): string {
   return tag.replace(/^en:/, "").replace(/-/g, " ");
 }
 
+const HOME_RETURN_TARGETS = ["/(tabs)", "/(tabs)/index", "/"];
+const MEALS_HUB_TARGETS = ["/meals", "/(tabs)/meals", "/(tabs)/meals/index"];
+
+const returnHomeAndResetMeals = (router: ReturnType<typeof useRouter>) => {
+  router.replace("/(tabs)/meals" as Href);
+  requestAnimationFrame(() => {
+    router.replace("/(tabs)" as Href);
+  });
+};
+
+const returnToMealsHubAndResetStack = (router: ReturnType<typeof useRouter>) => {
+  router.dismissTo("/meals" as Href);
+};
+
 function IngredientReview({ items }: { items: ReturnType<typeof useMeals>["mealDraft"]["items"] }) {
-  const itemsWithData = items.filter(
-    (i) => i.nutriscore_grade || i.nova_group || i.allergens_tags?.length || i.additives_tags?.length || i.nutrient_levels
-  );
+  const itemsWithData = items.filter((i) => {
+    const hasFlags =
+      !!i.nutrition?.nutriscore_grade ||
+      !!i.nutrition?.nova_group ||
+      !!i.nutrition?.allergens_tags?.length ||
+      !!i.nutrition?.additives_tags?.length ||
+      !!i.nutrition?.nutrient_levels;
+
+    const isEligibleOffItem = i.sourceType === "off" && !!i.nutrition;
+    return hasFlags || isEligibleOffItem;
+  });
 
   if (itemsWithData.length === 0) {
-    return <Text style={styles.cardText}>No ingredient data available. Try logging via voice or barcode.</Text>;
+    return <Text style={styles.cardText}>No ingredient data available yet.</Text>;
   }
 
   return (
     <>
       {itemsWithData.map((item) => {
-        const ns = item.nutriscore_grade?.toLowerCase();
-        const nsColor = ns ? (NUTRISCORE_COLOR[ns] ?? "#9ca3af") : null;
-        const novaColor = item.nova_group ? (NOVA_COLOR[item.nova_group] ?? "#9ca3af") : null;
-        const allergens = item.allergens_tags?.map(formatTag).filter(Boolean) ?? [];
-        const additives = item.additives_tags?.map(formatTag).filter(Boolean) ?? [];
-        const nl = item.nutrient_levels;
+        const ns = item.nutrition?.nutriscore_grade?.toLowerCase();
+        const nsColor = ns ? NUTRISCORE_COLOR[ns] ?? "#9ca3af" : null;
+        const nova = item.nutrition?.nova_group;
+        const novaColor = nova ? NOVA_COLOR[nova] ?? "#9ca3af" : null;
+        const allergens = item.nutrition?.allergens_tags?.map(formatTag).filter(Boolean) ?? [];
+        const additives = item.nutrition?.additives_tags?.map(formatTag).filter(Boolean) ?? [];
+        const nl = item.nutrition?.nutrient_levels;
         const highFlags = nl
           ? (["fat", "saturated-fat", "sugars", "salt"] as const)
               .filter((k) => nl[k] === "high")
@@ -51,48 +86,75 @@ function IngredientReview({ items }: { items: ReturnType<typeof useMeals>["mealD
             <Text style={styles.ingredientName}>{item.name}</Text>
 
             <View style={styles.badgeRow}>
-              {nsColor && (
+              {nsColor ? (
                 <View style={[styles.badge, { backgroundColor: nsColor }]}>
                   <Text style={styles.badgeText}>
-                    Nutri-Score {item.nutriscore_grade?.toUpperCase()}
+                    Nutri-Score {item.nutrition?.nutriscore_grade?.toUpperCase()}
                   </Text>
                 </View>
-              )}
-              {item.nova_group && novaColor && (
+              ) : null}
+              {nova && novaColor ? (
                 <View style={[styles.badge, { backgroundColor: novaColor }]}>
                   <Text style={styles.badgeText}>
-                    NOVA {item.nova_group} · {NOVA_LABEL[item.nova_group]}
+                    NOVA {nova} · {NOVA_LABEL[nova]}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </View>
 
-            {allergens.length > 0 && (
+            {!nsColor && !novaColor && (item.nutrition?.brand || item.nutrition?.serving_size) ? (
+              <View style={styles.badgeRow}>
+                {item.nutrition?.brand ? (
+                  <View style={styles.badgeNeutral}>
+                    <Text style={styles.badgeNeutralText}>{item.nutrition.brand}</Text>
+                  </View>
+                ) : null}
+                {item.nutrition?.serving_size ? (
+                  <View style={styles.badgeNeutral}>
+                    <Text style={styles.badgeNeutralText}>{item.nutrition.serving_size}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {allergens.length > 0 ? (
               <View style={styles.flagRow}>
                 <Text style={styles.flagBullet}>⚠️</Text>
-                <Text style={[styles.flagText, { color: "#b45309" }]}>
-                  Allergens: {allergens.join(", ")}
-                </Text>
+                <Text style={[styles.flagText, { color: "#b45309" }]}>Allergens: {allergens.join(", ")}</Text>
               </View>
-            )}
+            ) : null}
 
-            {additives.length > 0 && (
+            {additives.length > 0 ? (
               <View style={styles.flagRow}>
                 <Text style={styles.flagBullet}>🧪</Text>
                 <Text style={styles.flagText}>
-                  {additives.length} additive{additives.length > 1 ? "s" : ""}: {additives.slice(0, 4).join(", ")}{additives.length > 4 ? ` +${additives.length - 4} more` : ""}
+                  {additives.length} additive{additives.length > 1 ? "s" : ""}: {additives.slice(0, 4).join(", ")}
+                  {additives.length > 4 ? ` +${additives.length - 4} more` : ""}
                 </Text>
               </View>
-            )}
+            ) : null}
 
-            {highFlags.length > 0 && (
+            {item.nutrition?.harmfulIngredientMatches?.length ? (
+              <View style={styles.flagRow}>
+                <Text style={styles.flagBullet}>🚩</Text>
+                <Text style={[styles.flagText, { color: "#b91c1c" }]}>Flagged ingredients: {item.nutrition.harmfulIngredientMatches.join(", ")}</Text>
+              </View>
+            ) : null}
+
+            {highFlags.length > 0 ? (
               <View style={styles.flagRow}>
                 <Text style={styles.flagBullet}>🔴</Text>
-                <Text style={[styles.flagText, { color: "#b91c1c" }]}>
-                  High in: {highFlags.join(", ")}
-                </Text>
+                <Text style={[styles.flagText, { color: "#b91c1c" }]}>High in: {highFlags.join(", ")}</Text>
               </View>
-            )}
+            ) : null}
+
+            {!nsColor && !novaColor && allergens.length === 0 && additives.length === 0 && highFlags.length === 0 && !item.nutrition?.harmfulIngredientMatches?.length && !item.nutrition?.brand && !item.nutrition?.serving_size ? (
+              <View style={styles.badgeRow}>
+                <View style={styles.badgeNeutral}>
+                  <Text style={styles.badgeNeutralText}>OFF item</Text>
+                </View>
+              </View>
+            ) : null}
           </View>
         );
       })}
@@ -102,6 +164,8 @@ function IngredientReview({ items }: { items: ReturnType<typeof useMeals>["mealD
 
 export default function ReviewMealScreen() {
   const router = useRouter();
+  const finishNavigationLockRef = useRef(false);
+  const { profile } = useProfile();
   const { loggedMealId, returnTo } = useLocalSearchParams<{ loggedMealId?: string; returnTo?: string }>();
   const {
     mealDraft,
@@ -114,30 +178,78 @@ export default function ReviewMealScreen() {
 
   const savedMeal = useMemo(
     () => loggedMeals.find((meal) => meal.id === loggedMealId),
-    [loggedMeals, loggedMealId]
+    [loggedMealId, loggedMeals]
   );
 
   const isViewingSavedMeal = !!savedMeal;
   const mealType = savedMeal?.mealType || mealDraft.mealType || "Not selected";
   const mealMethod = savedMeal?.method || mealDraft.method || "Not selected";
   const mealMode = savedMeal?.logMode || mealDraft.logMode;
-  const mealName = savedMeal?.mealName || mealDraft.mealName || (mealDraft.items.length === 1
-    ? mealDraft.items[0]?.name ?? "Item Entry"
-    : `${mealDraft.mealType || "Meal"} Log`);
+  const mealName =
+    savedMeal?.mealName ||
+    mealDraft.mealName ||
+    (mealDraft.items.length === 1
+      ? mealDraft.items[0]?.name ?? "Item Entry"
+      : `${mealDraft.mealType || "Meal"} Log`);
   const mealItems = savedMeal?.items || mealDraft.items;
   const servingsLogged = savedMeal?.servingsLogged || mealDraft.servingsLogged || "1";
   const canFinish = mealItems.length > 0;
-  const eatScore = useMemo(() => scoreMeal(mealItems), [mealItems]);
+  const mealNutrition = useMemo(() => summarizeNutritionEntries(mealItems), [mealItems]);
+  const scoreSummary = useMemo(
+    () =>
+      buildScoreSummary(mealNutrition, {
+        calories: profile.calories,
+        protein: profile.protein,
+        carbs: profile.carb,
+        fat: profile.fat,
+      }),
+    [mealNutrition, profile.calories, profile.carb, profile.fat, profile.protein]
+  );
+
+  const exitTarget = ((typeof returnTo === "string" && returnTo.length > 0 ? returnTo : "/meals") as Href);
+  const isHomeExitTarget = HOME_RETURN_TARGETS.includes(exitTarget as string);
+  const isMealsExitTarget = MEALS_HUB_TARGETS.includes(exitTarget as string);
+
+  if (!isViewingSavedMeal && mealItems.length === 0) {
+    return <Redirect href={exitTarget} />;
+  }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <>
+      <Stack.Screen
+        options={{
+          headerLeft:
+            typeof returnTo === "string" && returnTo.length > 0
+              ? () => (
+                  <Pressable
+                    onPress={() => {
+                      if (isHomeExitTarget) {
+                        returnHomeAndResetMeals(router);
+                        return;
+                      }
+                      if (isMealsExitTarget) {
+                        returnToMealsHubAndResetStack(router);
+                        return;
+                      }
+                      router.replace(exitTarget);
+                    }}
+                    accessibilityRole="button"
+                    style={{ marginLeft: 4, paddingHorizontal: 8, paddingVertical: 6 }}
+                  >
+                    <Ionicons name="chevron-back" size={26} color="#111827" />
+                  </Pressable>
+                )
+              : undefined,
+        }}
+      />
+      <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>
         {isViewingSavedMeal ? "Meal Details" : editingLoggedMealId ? "Review Updated Meal" : "Review Meal"}
       </Text>
       <Text style={styles.subtitle}>
         {isViewingSavedMeal
           ? "Review this saved meal, or edit or delete it."
-          : "Review what you&apos;ve added before saving it to Today&apos;s Logged Meals."}
+          : "Review what you've added before saving it to Today's Logged Meals."}
       </Text>
 
       <View style={styles.card}>
@@ -151,34 +263,24 @@ export default function ReviewMealScreen() {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Nutrition Summary</Text>
+        <Text style={styles.metricText}>{Math.round(mealNutrition.calories)} kcal</Text>
+        <Text style={styles.cardText}>Protein: {Math.round(mealNutrition.protein)}g</Text>
+        <Text style={styles.cardText}>Carbs: {Math.round(mealNutrition.carbs)}g</Text>
+        <Text style={styles.cardText}>Fat: {Math.round(mealNutrition.fat)}g</Text>
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.cardTitle}>Eating Score</Text>
-        {eatScore ? (
-          <>
-            <View style={styles.scoreRow}>
-              <Text style={[styles.score, { color: eatScore.color }]}>
-                {eatScore.total} / 100
-              </Text>
-              <View style={[styles.gradeBadge, { backgroundColor: eatScore.color + "20", borderColor: eatScore.color }]}>
-                <Text style={[styles.gradeText, { color: eatScore.color }]}>{eatScore.grade}</Text>
-              </View>
-            </View>
-            {eatScore.items.map((s) => (
-              <View key={s.name} style={styles.scoreItemRow}>
-                <View style={styles.scoreItemLeft}>
-                  <Text style={styles.scoreItemName}>{s.name}</Text>
-                  <Text style={styles.scoreItemReason}>{s.reason}</Text>
-                </View>
-                <Text style={[styles.scoreItemVal, { color: gradeColor(
-                  s.score >= 80 ? "Excellent" : s.score >= 65 ? "Good" : s.score >= 50 ? "Fair" : "Poor"
-                )}]}>
-                  {s.score}
-                </Text>
-              </View>
-            ))}
-          </>
-        ) : (
-          <Text style={styles.cardText}>Add items to see your eating score.</Text>
-        )}
+        <View style={styles.scoreRow}>
+          <Text style={styles.score}>{scoreSummary.score} / 100</Text>
+          <View style={styles.gradeBadge}>
+            <Text style={styles.gradeText}>{scoreSummary.rating}/5</Text>
+          </View>
+        </View>
+        {scoreSummary.notes.map((note) => (
+          <Text key={note} style={styles.cardText}>• {note}</Text>
+        ))}
       </View>
 
       <View style={styles.card}>
@@ -190,16 +292,16 @@ export default function ReviewMealScreen() {
             <View key={item.id} style={styles.row}>
               <Text style={styles.rowTitle}>{item.name}</Text>
               <Text style={styles.rowText}>{formatQuantityLabel(item.quantity, item.unit)}</Text>
-              {item.calories != null ? (
-                <Text style={styles.macroText}>
-                  {item.calories} kcal · P {item.protein}g · C {item.carbs}g · F {item.fat}g
+              {item.nutrition ? (
+                <Text style={styles.rowMeta}>
+                  {Math.round(item.nutrition.calories ?? 0)} kcal • {Math.round(item.nutrition.protein ?? 0)}g protein • {Math.round(item.nutrition.carbs ?? 0)}g carbs • {Math.round(item.nutrition.fat ?? 0)}g fat
                 </Text>
               ) : null}
               {item.entryKind === "meal" && item.nestedItems?.length ? (
                 <View style={styles.nestedList}>
                   {item.nestedItems.map((nestedItem) => (
                     <Text key={nestedItem.id} style={styles.nestedItemText}>
-                      o - {nestedItem.name} — {formatQuantityLabel(nestedItem.quantity, nestedItem.unit)}
+                      • {nestedItem.name} — {formatQuantityLabel(nestedItem.quantity, nestedItem.unit)}
                     </Text>
                   ))}
                 </View>
@@ -207,25 +309,6 @@ export default function ReviewMealScreen() {
             </View>
           ))
         )}
-        {mealItems.some((i) => i.calories != null) && (() => {
-          const total = mealItems.reduce(
-            (acc, i) => ({
-              calories: acc.calories + (i.calories ?? 0),
-              protein:  acc.protein  + (i.protein  ?? 0),
-              carbs:    acc.carbs    + (i.carbs    ?? 0),
-              fat:      acc.fat      + (i.fat      ?? 0),
-            }),
-            { calories: 0, protein: 0, carbs: 0, fat: 0 }
-          );
-          return (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValues}>
-                {total.calories} kcal · P {Math.round(total.protein * 10) / 10}g · C {Math.round(total.carbs * 10) / 10}g · F {Math.round(total.fat * 10) / 10}g
-              </Text>
-            </View>
-          );
-        })()}
       </View>
 
       <View style={styles.card}>
@@ -252,15 +335,36 @@ export default function ReviewMealScreen() {
               style={styles.deleteButton}
               onPress={() => {
                 deleteLoggedMeal(savedMeal.id);
-                router.dismissTo("/meals" as Href);
+                if (isHomeExitTarget) {
+                  returnHomeAndResetMeals(router);
+                  return;
+                }
+                if (isMealsExitTarget) {
+                  returnToMealsHubAndResetStack(router);
+                  return;
+                }
+                router.replace(exitTarget);
               }}
             >
               <Text style={styles.deleteButtonText}>Delete Meal</Text>
             </Pressable>
           </View>
 
-          <Pressable style={styles.primaryButton} onPress={() => router.dismissTo("/meals" as Href)}>
-            <Text style={styles.primaryButtonText}>Back to Meals</Text>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => {
+              if (isHomeExitTarget) {
+                returnHomeAndResetMeals(router);
+                return;
+              }
+              if (isMealsExitTarget) {
+                returnToMealsHubAndResetStack(router);
+                return;
+              }
+              router.replace(exitTarget);
+            }}
+          >
+            <Text style={styles.primaryButtonText}>{isHomeExitTarget ? "Back to Home" : "Back to Meals"}</Text>
           </Pressable>
         </>
       ) : (
@@ -268,8 +372,19 @@ export default function ReviewMealScreen() {
           style={[styles.primaryButton, !canFinish && styles.buttonDisabled]}
           disabled={!canFinish}
           onPress={() => {
-            finishMealLogging();
-            router.dismissTo(((typeof returnTo === "string" && returnTo.length > 0 ? returnTo : "/meals") as Href));
+            if (finishNavigationLockRef.current) return;
+            finishNavigationLockRef.current = true;
+            const target = exitTarget;
+            if (isHomeExitTarget) {
+              returnHomeAndResetMeals(router);
+            } else if (isMealsExitTarget) {
+              returnToMealsHubAndResetStack(router);
+            } else {
+              router.replace(target);
+            }
+            setTimeout(() => {
+              finishMealLogging();
+            }, 0);
           }}
         >
           <Text style={[styles.primaryButtonText, !canFinish && styles.buttonTextDisabled]}>
@@ -278,6 +393,7 @@ export default function ReviewMealScreen() {
         </Pressable>
       )}
     </ScrollView>
+    </>
   );
 }
 
@@ -319,6 +435,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 4,
   },
+  metricText: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 8,
+  },
   scoreRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -326,10 +448,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   score: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: "800",
+    color: "#22c55e",
   },
   gradeBadge: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#22c55e",
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 12,
@@ -338,35 +463,7 @@ const styles = StyleSheet.create({
   gradeText: {
     fontSize: 13,
     fontWeight: "700",
-  },
-  scoreItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-    gap: 8,
-  },
-  scoreItemLeft: {
-    flex: 1,
-  },
-  scoreItemName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#111827",
-    textTransform: "capitalize",
-  },
-  scoreItemReason: {
-    fontSize: 12,
-    color: "#9ca3af",
-    marginTop: 1,
-  },
-  scoreItemVal: {
-    fontSize: 18,
-    fontWeight: "800",
-    minWidth: 36,
-    textAlign: "right",
+    color: "#166534",
   },
   row: {
     paddingVertical: 10,
@@ -383,30 +480,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6b7280",
   },
-  macroText: {
-    fontSize: 12,
-    color: "#10B981",
-    marginTop: 2,
-  },
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#F0FDF4",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 10,
-  },
-  totalLabel: {
+  rowMeta: {
     fontSize: 13,
-    fontWeight: "700",
-    color: "#065F46",
-  },
-  totalValues: {
-    fontSize: 12,
-    color: "#065F46",
-    fontWeight: "600",
+    color: "#4b5563",
+    lineHeight: 20,
+    marginTop: 6,
   },
   nestedList: {
     marginTop: 8,
@@ -444,21 +522,32 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
+    color: "#ffffff",
+  },
+  badgeNeutral: {
+    backgroundColor: "#e5e7eb",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  badgeNeutralText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#374151",
   },
   flagRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 2,
-    gap: 6,
+    marginBottom: 8,
   },
   flagBullet: {
-    fontSize: 14,
+    fontSize: 16,
+    marginRight: 8,
     lineHeight: 20,
   },
   flagText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: "#6b7280",
     lineHeight: 20,
   },
@@ -493,20 +582,19 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: "#22c55e",
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: "center",
-    marginTop: 4,
-  },
-  buttonDisabled: {
-    backgroundColor: "#d1d5db",
   },
   primaryButtonText: {
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
   },
+  buttonDisabled: {
+    backgroundColor: "#bbf7d0",
+  },
   buttonTextDisabled: {
-    color: "#374151",
+    color: "#166534",
   },
 });

@@ -57,17 +57,18 @@ function keywordAdjustment(name: string): { delta: number; reason: string | null
 
 function scoreItem(item: MealDraftItem): ItemEatScore {
   const name = item.name;
+  const nutrition = item.nutrition;
 
-  if (item.calories == null) {
+  if (!nutrition || nutrition.calories == null) {
     const { delta, reason } = keywordAdjustment(name);
     const score = Math.min(100, Math.max(0, 60 + delta));
     return { name, score, reason: reason ?? "No nutrition data — estimated from food type" };
   }
 
-  const cal = item.calories;
-  const prot = item.protein ?? 0;
-  const fat = item.fat ?? 0;
-  const carbs = item.carbs ?? 0;
+  const cal = nutrition.calories;
+  const prot = nutrition.protein ?? 0;
+  const fat = nutrition.fat ?? 0;
+  const carbs = nutrition.carbs ?? 0;
 
   const reasons: string[] = [];
   let score = 65;

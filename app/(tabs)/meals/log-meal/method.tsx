@@ -8,10 +8,18 @@ export default function MealMethodScreen() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const { setMealMethod } = useMeals();
 
+  const handleBack = () => {
+    if (typeof returnTo === "string" && returnTo) {
+      router.back();
+      return;
+    }
+    router.replace("/meals/log-meal/meal-type" as Href);
+  };
+
   const methods = [
     {
       title: "Barcode",
-      description: "Scan a barcode to quickly add a food item",
+      description: "Scan a barcode with Open Food Facts and add it to your log",
     },
     {
       title: "Voice",
@@ -25,10 +33,11 @@ export default function MealMethodScreen() {
 
   return (
     <View style={styles.container}>
+      <Pressable style={styles.backButton} onPress={handleBack}>
+        <Text style={styles.backButtonText}>Back</Text>
+      </Pressable>
       <Text style={styles.title}>Choose Logging Method</Text>
-      <Text style={styles.subtitle}>
-        Choose how you want to add items for this meal
-      </Text>
+      <Text style={styles.subtitle}>Choose how you want to add items for this meal</Text>
 
       {methods.map((method) => (
         <Pressable
@@ -36,6 +45,15 @@ export default function MealMethodScreen() {
           style={styles.card}
           onPress={() => {
             setMealMethod(method.title);
+            if (method.title === "Barcode") {
+              const methodReturnTarget = `${"/meals/log-meal/method"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+              const postAddReturnTarget = typeof returnTo === "string" && returnTo ? returnTo : "/meals";
+              router.push(
+                `/barcode-scan?returnTo=${encodeURIComponent("/meals/log-meal/add-items")}&finalReturnTo=${encodeURIComponent(methodReturnTarget)}&postAddReturnTo=${encodeURIComponent(postAddReturnTarget)}` as Href
+              );
+              return;
+            }
+
             router.push(
               `${"/meals/log-meal/add-items"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href
             );
@@ -55,6 +73,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#f7f7f7",
     padding: 20,
     paddingTop: 32,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginBottom: 18,
+  },
+  backButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
   },
   title: {
     fontSize: 28,

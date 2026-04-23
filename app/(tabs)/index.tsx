@@ -1,15 +1,18 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Link, useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo } from "react";
+import { useRouter, type Href } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { useProfile } from "../context/profileContext";
-import { colors } from "../lib/colors";
 import { VoiceRecorder } from "../../src/features/voice-log/components/VoiceRecorder";
 import { useVoiceLog } from "../../src/features/voice-log/hooks/useVoiceLog";
 import { pendingVoiceStore } from "../../src/features/voice-log/store/pendingVoice";
+import { useProfile } from "../context/profileContext";
+import { colors } from "../lib/colors";
 import { useMeals } from "./meals/meals-context";
-import { scoreMeal, gradeColor } from "./meals/eatScore";
+import { buildMealTags, buildScoreSummary, summarizeNutritionEntries } from "./meals/nutrition";
+
+const HOME_RETURN_TARGET = "/(tabs)" as const;
+const MEALS_RETURN_TARGET = "/meals" as const;
 
 const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
   success: { bg: colors.successLight, text: colors.successText },
@@ -17,23 +20,9 @@ const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
   danger: { bg: colors.dangerLight, text: colors.dangerText },
 };
 
-
 type TagProps = {
   label: string;
   variant: "success" | "warning" | "danger";
-};
-
-type MealCardProps = {
-  mealType: string;
-  calories: number;
-  time: string;
-  macros: { protein: number; carbs: number; fats: number };
-  tags: TagProps[];
-};
-
-type CaloriesProps = {
-  current: number;
-  goal: number;
 };
 
 type MacroProps = {
@@ -42,65 +31,70 @@ type MacroProps = {
   goal: number;
 };
 
-type LogButtonProps = {
-  name: keyof typeof Ionicons.glyphMap;
-  path?: string;
-  onPress?: () => void;
+type SummaryProps = {
+  currentCalories: number;
+  calorieGoal: number;
+  macros: { protein: number; carbs: number; fat: number };
+  macroGoals: { protein: number; carbs: number; fat: number };
+  rating: number;
+  score: number;
+  harmfulCount: number;
 };
 
-type ProfileData = {
-  weight: number;
-  height: number;
+type HomeMealCard = {
+  id: string;
+  mealType: string;
   calories: number;
-  protein: number;
-  carb: number;
-  fat: number;
+  time: string;
+  macros: { protein: number; carbs: number; fats: number };
+  tags: { label: string; variant: "success" | "warning" | "danger" }[];
 };
-
-type Totals = { calories: number; protein: number; carbs: number; fat: number };
 
 export default function Index() {
-  const { profile } = useProfile();
-  const { loggedMeals } = useMeals();
   const router = useRouter();
+  const { profile } = useProfile();
+  const { loggedMeals, beginNewMealDraft } = useMeals();
   const { state, startVoice, stopVoice, reset } = useVoiceLog();
 
   const todayKey = new Date().toDateString();
-
   const todaysMeals = useMemo(
-    () => loggedMeals.filter((m) => new Date(m.loggedAt).toDateString() === todayKey),
+    () => loggedMeals.filter((meal) => new Date(meal.loggedAt).toDateString() === todayKey),
     [loggedMeals, todayKey]
   );
 
-  const DEFAULT_TOTALS = { calories: 1500, protein: 120, carbs: 150, fat: 44 };
-  const DEFAULT_SCORE = 72;
-
-  const todaysTotals = useMemo(() => {
-    if (todaysMeals.length === 0) return DEFAULT_TOTALS;
-    const allItems = todaysMeals.flatMap((m) => m.items);
-    return {
-      calories: Math.round(allItems.reduce((s, i) => s + (i.calories ?? 0), 0)),
-      protein:  Math.round(allItems.reduce((s, i) => s + (i.protein  ?? 0), 0)),
-      carbs:    Math.round(allItems.reduce((s, i) => s + (i.carbs    ?? 0), 0)),
-      fat:      Math.round(allItems.reduce((s, i) => s + (i.fat      ?? 0), 0)),
-    };
+  const mealCards = useMemo<HomeMealCard[]>(() => {
+    return todaysMeals.map((meal) => {
+      const nutrition = summarizeNutritionEntries(meal.items);
+      return {
+        id: meal.id,
+        mealType: meal.mealType.toUpperCase(),
+        calories: Math.round(nutrition.calories),
+        time: new Date(meal.loggedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        macros: {
+          protein: Math.round(nutrition.protein),
+          carbs: Math.round(nutrition.carbs),
+          fats: Math.round(nutrition.fat),
+        },
+        tags: buildMealTags(nutrition),
+      };
+    });
   }, [todaysMeals]);
 
-  const avgScore = useMemo(() => {
-    if (todaysMeals.length === 0) return DEFAULT_SCORE;
-    const scores = todaysMeals.map((m) => scoreMeal(m.items)).filter(Boolean);
-    if (scores.length === 0) return null;
-    return Math.round(scores.reduce((s, ms) => s + ms!.total, 0) / scores.length);
-  }, [todaysMeals]);
+  const todayNutrition = useMemo(
+    () => summarizeNutritionEntries(todaysMeals.map((meal) => ({ nutrition: summarizeNutritionEntries(meal.items) }))),
+    [todaysMeals]
+  );
 
-  const harmfulCount = useMemo(() => {
-    if (todaysMeals.length === 0) return 2; // placeholder when no meals
-    const allItems = todaysMeals.flatMap((m) => m.items);
-    const hasOffData = allItems.some((i) => i.additives_tags !== undefined);
-    if (!hasOffData) return null; // meals logged but no OFF data yet
-    const unique = new Set(allItems.flatMap((i) => i.additives_tags ?? []));
-    return unique.size;
-  }, [todaysMeals]);
+  const scoreSummary = useMemo(
+    () =>
+      buildScoreSummary(todayNutrition, {
+        calories: profile.calories,
+        protein: profile.protein,
+        carbs: profile.carb,
+        fat: profile.fat,
+      }),
+    [profile.calories, profile.carb, profile.fat, profile.protein, todayNutrition]
+  );
 
   useEffect(() => {
     if (state.status === "preview") {
@@ -108,73 +102,89 @@ export default function Index() {
       reset();
       router.push("/meals/log-meal/voice-confirm" as Href);
     }
-  }, [state]);
+  }, [state, reset, router]);
 
   return (
-    <ScrollView contentContainerStyle={{ gap: 20, padding: 20 }}>
-      <Summary profile={profile} totals={todaysTotals} avgScore={avgScore} harmfulCount={harmfulCount} />
-      <LogMeal onMicPress={startVoice} />
-      <Meals meals={todaysMeals} />
-      <VoiceRecorder state={state} onStop={stopVoice} onDismiss={reset} />
+    <ScrollView contentContainerStyle={{ gap: 20, padding: 20, paddingBottom: 40 }}>
+      <Summary
+        currentCalories={Math.round(todayNutrition.calories)}
+        calorieGoal={profile.calories}
+        macros={{
+          protein: Math.round(todayNutrition.protein),
+          carbs: Math.round(todayNutrition.carbs),
+          fat: Math.round(todayNutrition.fat),
+        }}
+        macroGoals={{ protein: profile.protein, carbs: profile.carb, fat: profile.fat }}
+        rating={scoreSummary.rating}
+        score={scoreSummary.score}
+        harmfulCount={todayNutrition.harmfulIngredientMatches.length}
+      />
+      <QuickActions
+        onLogMeal={() => {
+          beginNewMealDraft();
+          router.push(`/meals/log-meal/meal-type?returnTo=${encodeURIComponent(MEALS_RETURN_TARGET)}` as Href);
+        }}
+        onBarcode={() =>
+          router.push(
+            `/barcode-scan?mode=quick-check&finalReturnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href
+          )
+        }
+        onMicPress={() => {
+          void startVoice();
+        }}
+      />
+      <Meals
+        meals={mealCards}
+        onOpenMeal={(mealId) => router.push(`/(tabs)/meals/log-meal/review?loggedMealId=${mealId}&returnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href)}
+      />
+      <VoiceRecorder state={state} onStop={() => void stopVoice()} onDismiss={reset} />
     </ScrollView>
   );
 }
 
 const Summary = ({
-  profile,
-  totals,
-  avgScore,
+  currentCalories,
+  calorieGoal,
+  macros,
+  macroGoals,
+  rating,
+  score,
   harmfulCount,
-}: {
-  profile: ProfileData;
-  totals: { calories: number; protein: number; carbs: number; fat: number };
-  avgScore: number | null;
-  harmfulCount: number | null;
-}) => (
+}: SummaryProps) => (
   <View>
-    <Text style={styles.header}>Today&apos;s Summary</Text>
-    <View>
-      <View style={styles.subContainer}>
-        <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
-          <Calories current={totals.calories} goal={profile.calories} />
-          <Macros totals={totals} profile={profile} />
-          <Score score={avgScore} />
-        </View>
-        <Separator />
-        <HarmfulIngredientsSummary count={harmfulCount} />
+    <Text style={styles.header}>Today's Summary</Text>
+    <View style={styles.subContainer}>
+      <View style={styles.summaryTopRow}>
+        <Calories current={currentCalories} goal={calorieGoal} />
+        <Macros current={macros} goals={macroGoals} />
+        <Score rate={rating} score={score} />
       </View>
+      <Separator />
+      <HarmfulIngredientsSummary count={harmfulCount} />
     </View>
   </View>
 );
 
-const HarmfulIngredientsSummary = ({ count }: { count: number | null }) => {
-  if (count === null) return null;
-  const isClean = count === 0;
-  return (
-    <Pressable style={styles.harmfulRow} onPress={() => console.log("pressed")}>
-      <Text style={[styles.harmfulText, isClean && { color: colors.successText }]}>
-        {isClean ? "No additives detected" : `${count} additive${count > 1 ? "s" : ""} detected`}
-      </Text>
-      <Ionicons name="chevron-forward" size={18} color={colors.textMedium} />
-    </Pressable>
-  );
-};
+const HarmfulIngredientsSummary = ({ count }: { count: number }) => (
+  <View style={styles.harmfulRow}>
+    <Text style={styles.harmfulText}>
+      {count > 0 ? `${count} harmful ingredient${count === 1 ? "" : "s"} detected` : "No harmful ingredients detected"}
+    </Text>
+    <Ionicons name="warning-outline" size={18} color={count > 0 ? colors.dangerText : colors.textMedium} />
+  </View>
+);
 
-const Score = ({ score }: { score: number | null }) => {
-  const color = score === null ? colors.danger : gradeColor(
-    score >= 80 ? "Excellent" : score >= 65 ? "Good" : score >= 50 ? "Fair" : "Poor"
-  );
-  return (
-    <View>
-      <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
-      <View style={[styles.circle, { backgroundColor: color }]}>
-        <Text style={styles.circleText}>{score ?? "--"}</Text>
-      </View>
+const Score = ({ rate, score }: { rate: number; score: number }) => (
+  <View>
+    <Text style={[styles.subHeader, { marginLeft: 3 }]}>SCORE</Text>
+    <View style={styles.circle}>
+      <Text style={styles.circleText}>{rate || "--"}/5</Text>
     </View>
-  );
-};
+    <Text style={styles.scoreCaption}>{score}/100</Text>
+  </View>
+);
 
-const Calories = ({ current, goal }: CaloriesProps) => (
+const Calories = ({ current, goal }: { current: number; goal: number }) => (
   <View>
     <Text style={styles.subHeader}>CALORIES</Text>
     <Text style={styles.caloriesNumber}>{current}</Text>
@@ -182,19 +192,13 @@ const Calories = ({ current, goal }: CaloriesProps) => (
   </View>
 );
 
-const Macros = ({
-  totals,
-  profile,
-}: {
-  totals: { protein: number; carbs: number; fat: number };
-  profile: ProfileData;
-}) => (
+const Macros = ({ current, goals }: { current: { protein: number; carbs: number; fat: number }; goals: { protein: number; carbs: number; fat: number } }) => (
   <View>
     <Text style={styles.subHeader}>MACROS</Text>
     <View style={styles.macrosContainer}>
-      <MacroNutrient nutrient="Protein" current={totals.protein} goal={profile.protein} />
-      <MacroNutrient nutrient="Carbs"   current={totals.carbs}   goal={profile.carb} />
-      <MacroNutrient nutrient="Fats"    current={totals.fat}     goal={profile.fat} />
+      <MacroNutrient nutrient="Protein" current={current.protein} goal={goals.protein} />
+      <MacroNutrient nutrient="Carbs" current={current.carbs} goal={goals.carbs} />
+      <MacroNutrient nutrient="Fats" current={current.fat} goal={goals.fat} />
     </View>
   </View>
 );
@@ -205,65 +209,65 @@ const MacroNutrient = ({ nutrient, current, goal }: MacroProps) => (
   </Text>
 );
 
-const LogMeal = ({ onMicPress }: { onMicPress: () => void }) => (
+const QuickActions = ({
+  onLogMeal,
+  onBarcode,
+  onMicPress,
+}: {
+  onLogMeal: () => void;
+  onBarcode: () => void;
+  onMicPress: () => void;
+}) => (
   <View>
     <Text style={styles.header}>Quick actions</Text>
     <View style={[styles.subContainer, styles.logMealRow]}>
-      <LogButton name="barcode" path="barcode-scan" />
-      <LogButton name="search" path="" />
-      <LogButton name="mic" onPress={onMicPress} />
-      <LogButton name="chatbubble-ellipses" path="ai-chat" />
+      <ActionButton label="Log meal" icon="restaurant-outline" onPress={onLogMeal} />
+      <ActionButton label="Barcode" icon="barcode-outline" onPress={onBarcode} />
+      <ActionButton label="Voice" icon="mic-outline" onPress={onMicPress} />
+      <ActionButton label="AI" icon="chatbubble-ellipses-outline" disabled />
     </View>
   </View>
 );
 
-const LogButton = ({ name, path, onPress }: LogButtonProps) => {
-  if (onPress) {
-    return (
-      <Pressable onPress={onPress}>
-        <Ionicons name={name} size={28} color={colors.textDark} />
-      </Pressable>
-    );
-  }
-  return (
-    <Link href={`../${path ?? ""}`}>
-      <Ionicons name={name} size={28} color={colors.textDark} />
-    </Link>
-  );
-};
+const ActionButton = ({
+  label,
+  icon,
+  onPress,
+  disabled = false,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
+  disabled?: boolean;
+}) => (
+  <Pressable style={[styles.actionButton, disabled && styles.actionButtonDisabled]} disabled={disabled} onPress={onPress}>
+    <Ionicons name={icon} size={24} color={disabled ? colors.textLight : colors.textDark} />
+    <Text style={[styles.actionButtonText, disabled && styles.actionButtonTextDisabled]}>{label}</Text>
+  </Pressable>
+);
 
-const DEFAULT_MEALS: MealCardProps[] = [
-  {
-    mealType: "BREAKFAST",
-    calories: 450,
-    time: "8:34 AM",
-    macros: { protein: 24, carbs: 58, fats: 12 },
-    tags: [{ label: "High fiber", variant: "success" }],
-  },
-  {
-    mealType: "LUNCH",
-    calories: 680,
-    time: "1:00 PM",
-    macros: { protein: 58, carbs: 64, fats: 24 },
-    tags: [{ label: "Moderate sodium", variant: "warning" }],
-  },
-];
-
-const Meals = ({ meals }: { meals: ReturnType<typeof useMeals>["loggedMeals"] }) => (
+const Meals = ({ meals, onOpenMeal }: { meals: HomeMealCard[]; onOpenMeal: (mealId: string) => void }) => (
   <View>
-    <Text style={styles.header}>Today&apos;s Meals</Text>
+    <Text style={styles.header}>Today's Meals</Text>
     <View>
       {meals.length === 0 ? (
-        DEFAULT_MEALS.map((meal) => <DefaultMealCard key={meal.mealType} {...meal} />)
+        <Text style={styles.emptyState}>No meals logged yet today.</Text>
       ) : (
-        meals.map((meal) => <MealCard key={meal.id} meal={meal} />)
+        meals.map((meal) => <MealCard key={meal.id} {...meal} onPress={() => onOpenMeal(meal.id)} />)
       )}
     </View>
   </View>
 );
 
-const DefaultMealCard = ({ mealType, calories, time, macros, tags }: MealCardProps) => (
-  <View>
+const MealCard = ({
+  mealType,
+  calories,
+  time,
+  macros,
+  tags,
+  onPress,
+}: HomeMealCard & { onPress: () => void }) => (
+  <Pressable onPress={onPress}>
     <Text style={styles.mealTypeLabel}>{mealType}</Text>
     <View style={styles.subContainer}>
       <View style={styles.mealTopRow}>
@@ -282,67 +286,25 @@ const DefaultMealCard = ({ mealType, calories, time, macros, tags }: MealCardPro
         <Text style={styles.mealMacroValue}>
           {macros.fats}g <Text style={styles.mealMacroLabel}>fats</Text>
         </Text>
-        <Ionicons name="chevron-forward" size={24} color={colors.textMedium} style={{ marginLeft: "auto" }} />
+        <Ionicons
+          name="chevron-forward"
+          size={24}
+          color={colors.textMedium}
+          style={{ marginLeft: "auto" }}
+        />
       </View>
       <View style={styles.tagsRow}>
-        {tags.map((tag, i) => <Tag key={i} label={tag.label} variant={tag.variant} />)}
+        {tags.map((tag) => (
+          <Tag key={`${mealType}-${tag.label}`} label={tag.label} variant={tag.variant} />
+        ))}
       </View>
     </View>
-  </View>
+  </Pressable>
 );
-
-const MealCard = ({ meal }: { meal: ReturnType<typeof useMeals>["loggedMeals"][number] }) => {
-  const calories = meal.items.reduce((s, i) => s + (i.calories ?? 0), 0);
-  const protein  = Math.round(meal.items.reduce((s, i) => s + (i.protein  ?? 0), 0));
-  const carbs    = Math.round(meal.items.reduce((s, i) => s + (i.carbs    ?? 0), 0));
-  const fat      = Math.round(meal.items.reduce((s, i) => s + (i.fat      ?? 0), 0));
-  const ms       = scoreMeal(meal.items);
-  const time     = new Date(meal.loggedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  const gradeTag: TagProps | null = ms
-    ? {
-        label: ms.grade,
-        variant: ms.total >= 65 ? "success" : ms.total >= 50 ? "warning" : "danger",
-      }
-    : null;
-
-  return (
-    <View>
-      <Text style={styles.mealTypeLabel}>{meal.mealType.toUpperCase()}</Text>
-      <View style={styles.subContainer}>
-        <View style={styles.mealTopRow}>
-          <Text style={styles.mealCalories}>
-            {Math.round(calories)} <Text style={styles.mealKcal}>kcal</Text>
-          </Text>
-          <Text style={styles.mealTime}>{time}</Text>
-        </View>
-        <View style={styles.mealMacrosRow}>
-          <Text style={styles.mealMacroValue}>
-            {protein}g <Text style={styles.mealMacroLabel}>protein</Text>
-          </Text>
-          <Text style={styles.mealMacroValue}>
-            {carbs}g <Text style={styles.mealMacroLabel}>carbs</Text>
-          </Text>
-          <Text style={styles.mealMacroValue}>
-            {fat}g <Text style={styles.mealMacroLabel}>fats</Text>
-          </Text>
-          <Ionicons name="chevron-forward" size={24} color={colors.textMedium} style={{ marginLeft: "auto" }} />
-        </View>
-        {gradeTag && (
-          <View style={styles.tagsRow}>
-            <Tag label={gradeTag.label} variant={gradeTag.variant} />
-          </View>
-        )}
-      </View>
-    </View>
-  );
-};
 
 const Tag = ({ label, variant }: TagProps) => (
   <View style={[styles.tag, { backgroundColor: TAG_COLORS[variant].bg }]}>
-    <Text style={[styles.tagText, { color: TAG_COLORS[variant].text }]}>
-      {label}
-    </Text>
+    <Text style={[styles.tagText, { color: TAG_COLORS[variant].text }]}>{label}</Text>
   </View>
 );
 
@@ -368,6 +330,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
+  summaryTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    gap: 12,
+  },
   harmfulRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -376,7 +343,6 @@ const styles = StyleSheet.create({
   harmfulText: {
     color: colors.danger,
     fontStyle: "italic",
-    textDecorationLine: "underline",
   },
   caloriesNumber: {
     fontWeight: "bold",
@@ -389,21 +355,44 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   circle: {
-    width: 50,
-    height: 50,
-    borderRadius: 30,
-    backgroundColor: colors.danger,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },
   circleText: {
     fontWeight: "bold",
-    fontSize: 18,
+    fontSize: 16,
     color: colors.white,
   },
+  scoreCaption: {
+    color: colors.textMedium,
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
+  },
   logMealRow: {
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     flexDirection: "row",
+    gap: 8,
+  },
+  actionButton: {
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  actionButtonDisabled: {
+    opacity: 0.45,
+  },
+  actionButtonText: {
+    fontSize: 12,
+    color: colors.textDark,
+    fontWeight: "600",
+  },
+  actionButtonTextDisabled: {
+    color: colors.textMedium,
   },
   mealTypeLabel: {
     marginTop: 8,
@@ -444,26 +433,23 @@ const styles = StyleSheet.create({
     marginVertical: 14,
     alignSelf: "center",
   },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-  },
-  tagText: {
-    fontSize: 11,
-    fontWeight: "500",
-  },
   tagsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
-    marginTop: 8,
+    marginTop: 10,
+  },
+  tag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   emptyState: {
-    color: colors.textLight,
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 12,
+    color: colors.textMedium,
+    marginTop: 8,
   },
 });

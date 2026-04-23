@@ -10,11 +10,22 @@ export default function MealTypeScreen() {
 
   const mealTypes = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
+  const handleBack = () => {
+    if (typeof returnTo === "string" && returnTo) {
+      router.replace(returnTo as Href);
+      return;
+    }
+    router.replace("/" as Href);
+  };
+
   return (
     <View style={styles.container}>
+      <Pressable style={styles.backButton} onPress={handleBack}>
+        <Text style={styles.backButtonText}>Back</Text>
+      </Pressable>
       <Text style={styles.title}>Select Meal Type</Text>
       <Text style={styles.subtitle}>
-        Pick the type of meal you&apos;re logging
+        Pick the type of meal you're logging
       </Text>
 
       {mealTypes.map((meal) => (
@@ -41,6 +52,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#f7f7f7",
     padding: 20,
     paddingTop: 32,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginBottom: 18,
+  },
+  backButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
   },
   title: {
     fontSize: 28,
