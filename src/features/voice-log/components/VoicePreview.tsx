@@ -30,6 +30,53 @@ function sumNutrition(items: ParsedVoiceResult["items"]): NutritionInfo | null {
   );
 }
 
+const NUTRISCORE_COLORS: Record<string, string> = {
+  a: "#038141", b: "#85BB2F", c: "#FECB02", d: "#EE8100", e: "#E63E11",
+};
+
+const NOVA_LABELS: Record<number, { label: string; color: string }> = {
+  1: { label: "Unprocessed", color: "#038141" },
+  2: { label: "Processed ingredient", color: "#85BB2F" },
+  3: { label: "Processed", color: "#EE8100" },
+  4: { label: "Ultra-processed", color: "#E63E11" },
+};
+
+function getHarmfulAdditives(tags: string[] | null | undefined): string[] {
+  if (!tags) return [];
+  return tags
+    .filter((t) => t.startsWith("en:e") || t.includes("-"))
+    .slice(0, 5)
+    .map((t) => t.replace(/^en:/, "").toUpperCase());
+}
+
+function NutritionBadges({ n }: { n: NutritionInfo }) {
+  const score = n.nutriscore_grade?.toLowerCase();
+  const nova = n.nova_group;
+  const harmful = getHarmfulAdditives(n.additives_tags);
+
+  if (!score && !nova && harmful.length === 0) return null;
+
+  return (
+    <View style={styles.badgeGroup}>
+      {score && (
+        <View style={[styles.badge, { backgroundColor: NUTRISCORE_COLORS[score] ?? "#9CA3AF" }]}>
+          <Text style={styles.badgeText}>Nutri-Score {score.toUpperCase()}</Text>
+        </View>
+      )}
+      {nova != null && NOVA_LABELS[nova] && (
+        <View style={[styles.badge, { backgroundColor: NOVA_LABELS[nova].color }]}>
+          <Text style={styles.badgeText}>NOVA {nova} · {NOVA_LABELS[nova].label}</Text>
+        </View>
+      )}
+      {harmful.length > 0 && (
+        <View style={[styles.badge, styles.harmfulBadge]}>
+          <Text style={styles.harmfulText}>⚠ {harmful.join(", ")}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export function VoicePreview({ result, onConfirm, onDismiss }: Props) {
   const hasItems = result.items.length > 0;
   const total = sumNutrition(result.items);
@@ -59,12 +106,15 @@ export function VoicePreview({ result, onConfirm, onDismiss }: Props) {
                   <Text style={styles.itemName}>{item.name}</Text>
                 </View>
                 {item.nutrition ? (
-                  <Text style={styles.macroLine}>
-                    {item.nutrition.calories} kcal{"  "}
-                    P {item.nutrition.protein}g{"  "}
-                    C {item.nutrition.carbs}g{"  "}
-                    F {item.nutrition.fat}g
-                  </Text>
+                  <>
+                    <Text style={styles.macroLine}>
+                      {item.nutrition.calories} kcal{"  "}
+                      P {item.nutrition.protein}g{"  "}
+                      C {item.nutrition.carbs}g{"  "}
+                      F {item.nutrition.fat}g
+                    </Text>
+                    <NutritionBadges n={item.nutrition} />
+                  </>
                 ) : (
                   <Text style={styles.macroUnknown}>nutrition unavailable</Text>
                 )}
@@ -140,13 +190,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   list: {
-    maxHeight: 240,
+    maxHeight: 300,
   },
   itemRow: {
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
-    gap: 3,
+    gap: 4,
   },
   itemLeft: {
     flexDirection: "row",
@@ -174,6 +224,30 @@ const styles = StyleSheet.create({
     color: "#D1D5DB",
     fontStyle: "italic",
     paddingLeft: 2,
+  },
+  badgeGroup: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 4,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  harmfulBadge: {
+    backgroundColor: "#FEF3C7",
+  },
+  harmfulText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#92400E",
   },
   totalRow: {
     flexDirection: "row",
