@@ -2,8 +2,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link, useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useProfile } from "../context/profileContext";
 
+import { useProfile } from "../context/profileContext";
 import { colors } from "../lib/colors";
 import { VoiceRecorder } from "../../src/features/voice-log/components/VoiceRecorder";
 import { useVoiceLog } from "../../src/features/voice-log/hooks/useVoiceLog";
