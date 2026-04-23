@@ -9,7 +9,11 @@ import { pendingVoiceStore } from "../../src/features/voice-log/store/pendingVoi
 import { useProfile } from "../context/profileContext";
 import { colors } from "../lib/colors";
 import { useMeals } from "./meals/meals-context";
-import { buildMealTags, buildScoreSummary, summarizeNutritionEntries } from "./meals/nutrition";
+import {
+  buildMealTags,
+  buildScoreSummary,
+  summarizeNutritionEntries,
+} from "./meals/nutrition";
 
 const HOME_RETURN_TARGET = "/(tabs)" as const;
 const MEALS_RETURN_TARGET = "/meals" as const;
@@ -58,8 +62,11 @@ export default function Index() {
 
   const todayKey = new Date().toDateString();
   const todaysMeals = useMemo(
-    () => loggedMeals.filter((meal) => new Date(meal.loggedAt).toDateString() === todayKey),
-    [loggedMeals, todayKey]
+    () =>
+      loggedMeals.filter(
+        (meal) => new Date(meal.loggedAt).toDateString() === todayKey,
+      ),
+    [loggedMeals, todayKey],
   );
 
   const mealCards = useMemo<HomeMealCard[]>(() => {
@@ -69,7 +76,10 @@ export default function Index() {
         id: meal.id,
         mealType: meal.mealType.toUpperCase(),
         calories: Math.round(nutrition.calories),
-        time: new Date(meal.loggedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        time: new Date(meal.loggedAt).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
         macros: {
           protein: Math.round(nutrition.protein),
           carbs: Math.round(nutrition.carbs),
@@ -81,8 +91,13 @@ export default function Index() {
   }, [todaysMeals]);
 
   const todayNutrition = useMemo(
-    () => summarizeNutritionEntries(todaysMeals.map((meal) => ({ nutrition: summarizeNutritionEntries(meal.items) }))),
-    [todaysMeals]
+    () =>
+      summarizeNutritionEntries(
+        todaysMeals.map((meal) => ({
+          nutrition: summarizeNutritionEntries(meal.items),
+        })),
+      ),
+    [todaysMeals],
   );
 
   const scoreSummary = useMemo(
@@ -93,7 +108,13 @@ export default function Index() {
         carbs: profile.carb,
         fat: profile.fat,
       }),
-    [profile.calories, profile.carb, profile.fat, profile.protein, todayNutrition]
+    [
+      profile.calories,
+      profile.carb,
+      profile.fat,
+      profile.protein,
+      todayNutrition,
+    ],
   );
 
   useEffect(() => {
@@ -105,7 +126,9 @@ export default function Index() {
   }, [state, reset, router]);
 
   return (
-    <ScrollView contentContainerStyle={{ gap: 20, padding: 20, paddingBottom: 40 }}>
+    <ScrollView
+      contentContainerStyle={{ gap: 20, padding: 20, paddingBottom: 40 }}
+    >
       <Summary
         currentCalories={Math.round(todayNutrition.calories)}
         calorieGoal={profile.calories}
@@ -114,7 +137,11 @@ export default function Index() {
           carbs: Math.round(todayNutrition.carbs),
           fat: Math.round(todayNutrition.fat),
         }}
-        macroGoals={{ protein: profile.protein, carbs: profile.carb, fat: profile.fat }}
+        macroGoals={{
+          protein: profile.protein,
+          carbs: profile.carb,
+          fat: profile.fat,
+        }}
         rating={scoreSummary.rating}
         score={scoreSummary.score}
         harmfulCount={todayNutrition.harmfulIngredientMatches.length}
@@ -122,11 +149,13 @@ export default function Index() {
       <QuickActions
         onLogMeal={() => {
           beginNewMealDraft();
-          router.push(`/meals/log-meal/meal-type?returnTo=${encodeURIComponent(MEALS_RETURN_TARGET)}` as Href);
+          router.push(
+            `/meals/log-meal/meal-type?returnTo=${encodeURIComponent(MEALS_RETURN_TARGET)}` as Href,
+          );
         }}
         onBarcode={() =>
           router.push(
-            `/barcode-scan?mode=quick-check&finalReturnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href
+            `/barcode-scan?mode=quick-check&finalReturnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href,
           )
         }
         onMicPress={() => {
@@ -135,9 +164,17 @@ export default function Index() {
       />
       <Meals
         meals={mealCards}
-        onOpenMeal={(mealId) => router.push(`/(tabs)/meals/log-meal/review?loggedMealId=${mealId}&returnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href)}
+        onOpenMeal={(mealId) =>
+          router.push(
+            `/(tabs)/meals/log-meal/review?loggedMealId=${mealId}&returnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href,
+          )
+        }
       />
-      <VoiceRecorder state={state} onStop={() => void stopVoice()} onDismiss={reset} />
+      <VoiceRecorder
+        state={state}
+        onStop={() => void stopVoice()}
+        onDismiss={reset}
+      />
     </ScrollView>
   );
 }
@@ -152,7 +189,7 @@ const Summary = ({
   harmfulCount,
 }: SummaryProps) => (
   <View>
-    <Text style={styles.header}>Today's Summary</Text>
+    <Text style={styles.header}>Today&apos;s Summary</Text>
     <View style={styles.subContainer}>
       <View style={styles.summaryTopRow}>
         <Calories current={currentCalories} goal={calorieGoal} />
@@ -168,9 +205,15 @@ const Summary = ({
 const HarmfulIngredientsSummary = ({ count }: { count: number }) => (
   <View style={styles.harmfulRow}>
     <Text style={styles.harmfulText}>
-      {count > 0 ? `${count} harmful ingredient${count === 1 ? "" : "s"} detected` : "No harmful ingredients detected"}
+      {count > 0
+        ? `${count} harmful ingredient${count === 1 ? "" : "s"} detected`
+        : "No harmful ingredients detected"}
     </Text>
-    <Ionicons name="warning-outline" size={18} color={count > 0 ? colors.dangerText : colors.textMedium} />
+    <Ionicons
+      name="warning-outline"
+      size={18}
+      color={count > 0 ? colors.dangerText : colors.textMedium}
+    />
   </View>
 );
 
@@ -192,12 +235,26 @@ const Calories = ({ current, goal }: { current: number; goal: number }) => (
   </View>
 );
 
-const Macros = ({ current, goals }: { current: { protein: number; carbs: number; fat: number }; goals: { protein: number; carbs: number; fat: number } }) => (
+const Macros = ({
+  current,
+  goals,
+}: {
+  current: { protein: number; carbs: number; fat: number };
+  goals: { protein: number; carbs: number; fat: number };
+}) => (
   <View>
     <Text style={styles.subHeader}>MACROS</Text>
     <View style={styles.macrosContainer}>
-      <MacroNutrient nutrient="Protein" current={current.protein} goal={goals.protein} />
-      <MacroNutrient nutrient="Carbs" current={current.carbs} goal={goals.carbs} />
+      <MacroNutrient
+        nutrient="Protein"
+        current={current.protein}
+        goal={goals.protein}
+      />
+      <MacroNutrient
+        nutrient="Carbs"
+        current={current.carbs}
+        goal={goals.carbs}
+      />
       <MacroNutrient nutrient="Fats" current={current.fat} goal={goals.fat} />
     </View>
   </View>
@@ -221,8 +278,16 @@ const QuickActions = ({
   <View>
     <Text style={styles.header}>Quick actions</Text>
     <View style={[styles.subContainer, styles.logMealRow]}>
-      <ActionButton label="Log meal" icon="restaurant-outline" onPress={onLogMeal} />
-      <ActionButton label="Barcode" icon="barcode-outline" onPress={onBarcode} />
+      <ActionButton
+        label="Log meal"
+        icon="restaurant-outline"
+        onPress={onLogMeal}
+      />
+      <ActionButton
+        label="Barcode"
+        icon="barcode-outline"
+        onPress={onBarcode}
+      />
       <ActionButton label="Voice" icon="mic-outline" onPress={onMicPress} />
       <ActionButton label="AI" icon="chatbubble-ellipses-outline" disabled />
     </View>
@@ -240,20 +305,47 @@ const ActionButton = ({
   onPress?: () => void;
   disabled?: boolean;
 }) => (
-  <Pressable style={[styles.actionButton, disabled && styles.actionButtonDisabled]} disabled={disabled} onPress={onPress}>
-    <Ionicons name={icon} size={24} color={disabled ? colors.textLight : colors.textDark} />
-    <Text style={[styles.actionButtonText, disabled && styles.actionButtonTextDisabled]}>{label}</Text>
+  <Pressable
+    style={[styles.actionButton, disabled && styles.actionButtonDisabled]}
+    disabled={disabled}
+    onPress={onPress}
+  >
+    <Ionicons
+      name={icon}
+      size={24}
+      color={disabled ? colors.textLight : colors.textDark}
+    />
+    <Text
+      style={[
+        styles.actionButtonText,
+        disabled && styles.actionButtonTextDisabled,
+      ]}
+    >
+      {label}
+    </Text>
   </Pressable>
 );
 
-const Meals = ({ meals, onOpenMeal }: { meals: HomeMealCard[]; onOpenMeal: (mealId: string) => void }) => (
+const Meals = ({
+  meals,
+  onOpenMeal,
+}: {
+  meals: HomeMealCard[];
+  onOpenMeal: (mealId: string) => void;
+}) => (
   <View>
-    <Text style={styles.header}>Today's Meals</Text>
+    <Text style={styles.header}>Today&apos;s Meals</Text>
     <View>
       {meals.length === 0 ? (
         <Text style={styles.emptyState}>No meals logged yet today.</Text>
       ) : (
-        meals.map((meal) => <MealCard key={meal.id} {...meal} onPress={() => onOpenMeal(meal.id)} />)
+        meals.map((meal) => (
+          <MealCard
+            key={meal.id}
+            {...meal}
+            onPress={() => onOpenMeal(meal.id)}
+          />
+        ))
       )}
     </View>
   </View>
@@ -295,7 +387,11 @@ const MealCard = ({
       </View>
       <View style={styles.tagsRow}>
         {tags.map((tag) => (
-          <Tag key={`${mealType}-${tag.label}`} label={tag.label} variant={tag.variant} />
+          <Tag
+            key={`${mealType}-${tag.label}`}
+            label={tag.label}
+            variant={tag.variant}
+          />
         ))}
       </View>
     </View>
@@ -304,7 +400,9 @@ const MealCard = ({
 
 const Tag = ({ label, variant }: TagProps) => (
   <View style={[styles.tag, { backgroundColor: TAG_COLORS[variant].bg }]}>
-    <Text style={[styles.tagText, { color: TAG_COLORS[variant].text }]}>{label}</Text>
+    <Text style={[styles.tagText, { color: TAG_COLORS[variant].text }]}>
+      {label}
+    </Text>
   </View>
 );
 

@@ -12,5 +12,5 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "app/lib/colors.js"
-  ]
+, "src/lib/harmfulIngredients.js"  ]
 }
