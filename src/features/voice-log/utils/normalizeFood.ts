@@ -1,5 +1,5 @@
 const STOP_WORDS = new Set([
-  "some", "the", "a", "an", "of", "with", "and", "or", "my", "me",
+  "some", "the", "of", "with", "and", "or", "my", "me",
 ]);
 
 const ALIASES: Record<string, string> = {

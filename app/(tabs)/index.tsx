@@ -132,6 +132,7 @@ export default function Index() {
         onMicPress={() => {
           void startVoice();
         }}
+        onAiPress={() => router.push("/ai-chat" as Href)}
       />
       <Meals
         meals={mealCards}
@@ -213,10 +214,12 @@ const QuickActions = ({
   onLogMeal,
   onBarcode,
   onMicPress,
+  onAiPress,
 }: {
   onLogMeal: () => void;
   onBarcode: () => void;
   onMicPress: () => void;
+  onAiPress: () => void;
 }) => (
   <View>
     <Text style={styles.header}>Quick actions</Text>
@@ -224,7 +227,7 @@ const QuickActions = ({
       <ActionButton label="Log meal" icon="restaurant-outline" onPress={onLogMeal} />
       <ActionButton label="Barcode" icon="barcode-outline" onPress={onBarcode} />
       <ActionButton label="Voice" icon="mic-outline" onPress={onMicPress} />
-      <ActionButton label="AI" icon="chatbubble-ellipses-outline" disabled />
+      <ActionButton label="AI" icon="chatbubble-ellipses-outline" onPress={onAiPress} />
     </View>
   </View>
 );
