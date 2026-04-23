@@ -54,6 +54,15 @@ type SearchResponse = {
   products?: OpenFoodFactsSearchProduct[];
 };
 
+export type OpenFoodFactsSearchPage = {
+  products: OpenFoodFactsSearchProduct[];
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  totalCount: number;
+  hasMore: boolean;
+};
+
 const PRODUCT_FIELDS = [
   "product_name",
   "brands",
@@ -90,21 +99,37 @@ const SEARCH_FIELDS = [
   "code",
   "product_name",
   "brands",
+  "nutriscore_grade",
+  "nova_group",
   "serving_size",
   "ingredients_text",
+  "additives_tags",
+  "allergens_tags",
+  "nutrient_levels",
+  "ingredients_analysis_tags",
   "nutriments.energy-kcal_100g",
   "nutriments.proteins_100g",
   "nutriments.carbohydrates_100g",
   "nutriments.fat_100g",
+  "nutriments.saturated-fat_100g",
+  "nutriments.sugars_100g",
+  "nutriments.fiber_100g",
+  "nutriments.salt_100g",
+  "nutriments.sodium_100g",
   "nutriments.energy-kcal_serving",
   "nutriments.proteins_serving",
   "nutriments.carbohydrates_serving",
   "nutriments.fat_serving",
+  "nutriments.sugars_serving",
+  "nutriments.fiber_serving",
+  "nutriments.salt_serving",
 ].join(",");
 
 const SEARCH_LIMIT_PER_MINUTE = 8;
 const SEARCH_WINDOW_MS = 60_000;
-const searchCache = new Map<string, OpenFoodFactsSearchProduct[]>();
+const OFF_BASE_URL = 'https://world.openfoodfacts.net';
+const searchCache = new Map<string, OpenFoodFactsSearchPage>();
+const searchBatchCache = new Map<string, { products: OpenFoodFactsSearchProduct[]; totalCount: number }>();
 const productCache = new Map<string, ProductResult>();
 const searchRequestTimestamps: number[] = [];
 
@@ -115,7 +140,93 @@ const pruneSearchTimestamps = () => {
   }
 };
 
-const normalizeSearchQuery = (query: string) => query.trim().toLowerCase().replace(/\s+/g, " ");
+const decodeHtmlEntities = (value: string) =>
+  value
+    .replace(/&apos;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+
+const normalizeSearchQuery = (query: string) =>
+  decodeHtmlEntities(query)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+const buildSearchCacheKey = (query: string, page: number, pageSize: number) => `${normalizeSearchQuery(query)}::${page}::${pageSize}`;
+const buildSearchBatchCacheKey = (query: string, batchPage: number, batchSize: number) => `${normalizeSearchQuery(query)}::batch::${batchPage}::${batchSize}`;
+
+const getNormalizedTokens = (value: string) => normalizeSearchQuery(value).split(' ').filter(Boolean);
+
+const getSearchScore = (product: OpenFoodFactsSearchProduct, normalizedQuery: string) => {
+  const name = normalizeSearchQuery(product.product_name);
+  const brand = normalizeSearchQuery(product.brands ?? '');
+  const searchable = `${name} ${brand}`.trim();
+  const queryTokens = getNormalizedTokens(normalizedQuery);
+  const nameTokens = getNormalizedTokens(name);
+  const brandTokens = getNormalizedTokens(brand);
+  const exactWordPattern = new RegExp(`(?:^|\\s)${normalizedQuery}(?:\\s|$)`);
+
+  let score = 0;
+
+  if (name === normalizedQuery) score += 250_000;
+  if (brand === normalizedQuery) score += 20_000;
+
+  if (exactWordPattern.test(name)) score += 70_000;
+  if (exactWordPattern.test(brand)) score += 4_000;
+
+  if (name.startsWith(`${normalizedQuery} `) || name.startsWith(normalizedQuery)) score += 45_000;
+  if (brand.startsWith(`${normalizedQuery} `) || brand.startsWith(normalizedQuery)) score += 3_500;
+
+  if (nameTokens.includes(normalizedQuery)) score += 30_000;
+  if (brandTokens.includes(normalizedQuery)) score += 1_500;
+
+  if (name.includes(normalizedQuery)) score += 12_000;
+  if (brand.includes(normalizedQuery)) score += 400;
+
+  const exactNameTokenMatches = queryTokens.filter((token) => nameTokens.includes(token)).length;
+  const exactBrandTokenMatches = queryTokens.filter((token) => brandTokens.includes(token)).length;
+  const matchedTokens = queryTokens.filter((token) => searchable.includes(token));
+  const missingTokens = queryTokens.length - matchedTokens.length;
+
+  score += exactNameTokenMatches * 8_000;
+  score += exactBrandTokenMatches * 600;
+  score += matchedTokens.length * 750;
+  score -= missingTokens * 18_000;
+
+  if (queryTokens.length > 0 && exactNameTokenMatches === queryTokens.length) {
+    score += 20_000;
+  }
+
+  if (!name.includes(normalizedQuery)) {
+    score -= 14_000;
+  }
+
+  if (!searchable.includes(normalizedQuery) && missingTokens > 0) {
+    score -= 25_000;
+  }
+
+  score -= Math.max(0, name.length - normalizedQuery.length) * 2.5;
+
+  return score;
+};
+
+const sortProductsForQuery = (products: OpenFoodFactsSearchProduct[], query: string) => {
+  const normalizedQuery = normalizeSearchQuery(query);
+  return [...products].sort((a, b) => {
+    const scoreDiff = getSearchScore(b, normalizedQuery) - getSearchScore(a, normalizedQuery);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const caloriesA = a.nutriments['energy-kcal_serving'] ?? a.nutriments['energy-kcal_100g'] ?? -1;
+    const caloriesB = b.nutriments['energy-kcal_serving'] ?? b.nutriments['energy-kcal_100g'] ?? -1;
+    if (caloriesA !== caloriesB) return caloriesB - caloriesA;
+
+    return a.product_name.localeCompare(b.product_name);
+  });
+};
 
 const coerceNumber = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -145,25 +256,25 @@ const normalizeNutriments = (raw: Record<string, unknown> | undefined): OpenFood
   salt_serving: coerceNumber(raw?.salt_serving),
 });
 
-const normalizeProduct = (raw: Record<string, unknown> | null | undefined): OpenFoodFactsProduct | null => {
+const normalizeProduct = (raw: Record<string, unknown> | null | undefined, fallbackCode?: string): OpenFoodFactsProduct | null => {
   if (!raw) return null;
 
-  const code = String(raw.code ?? "").trim();
-  const productName = String(raw.product_name ?? "").trim();
+  const code = String(raw.code ?? fallbackCode ?? "").trim();
+  const productName = decodeHtmlEntities(String(raw.product_name ?? "").trim());
   if (!code || !productName) return null;
 
   return {
     code,
     product_name: productName,
-    brands: typeof raw.brands === "string" ? raw.brands : null,
+    brands: typeof raw.brands === "string" ? decodeHtmlEntities(raw.brands) : null,
     nova_group: coerceNumber(raw.nova_group),
     nutriscore_grade: typeof raw.nutriscore_grade === "string" ? raw.nutriscore_grade : null,
-    ingredients_text: typeof raw.ingredients_text === "string" ? raw.ingredients_text : null,
+    ingredients_text: typeof raw.ingredients_text === "string" ? decodeHtmlEntities(raw.ingredients_text) : null,
     additives_tags: Array.isArray(raw.additives_tags) ? raw.additives_tags.filter((value): value is string => typeof value === "string") : null,
     allergens_tags: Array.isArray(raw.allergens_tags) ? raw.allergens_tags.filter((value): value is string => typeof value === "string") : null,
     nutrient_levels: raw.nutrient_levels && typeof raw.nutrient_levels === "object" ? raw.nutrient_levels as OpenFoodFactsProduct["nutrient_levels"] : null,
     ingredients_analysis_tags: Array.isArray(raw.ingredients_analysis_tags) ? raw.ingredients_analysis_tags.filter((value): value is string => typeof value === "string") : null,
-    serving_size: typeof raw.serving_size === "string" ? raw.serving_size : null,
+    serving_size: typeof raw.serving_size === "string" ? decodeHtmlEntities(raw.serving_size) : null,
     nutriments: normalizeNutriments(raw.nutriments as Record<string, unknown> | undefined),
   };
 };
@@ -177,35 +288,81 @@ export const getOpenFoodFactsSearchWaitMs = () => {
   return Math.max(0, SEARCH_WINDOW_MS - (Date.now() - searchRequestTimestamps[0]));
 };
 
-export const searchOpenFoodFacts = async (query: string, pageSize = 8) => {
+export const searchOpenFoodFactsPage = async (
+  query: string,
+  page = 1,
+  pageSize = 8
+): Promise<OpenFoodFactsSearchPage> => {
   const normalizedQuery = normalizeSearchQuery(query);
-  if (!normalizedQuery) return [];
+  if (!normalizedQuery) {
+    return {
+      products: [],
+      page,
+      pageSize,
+      pageCount: 0,
+      totalCount: 0,
+      hasMore: false,
+    };
+  }
 
-  const cached = searchCache.get(normalizedQuery);
+  const cacheKey = buildSearchCacheKey(query, page, pageSize);
+  const cached = searchCache.get(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const waitMs = getOpenFoodFactsSearchWaitMs();
-  if (waitMs > 0) {
-    throw new Error(`RATE_LIMIT:${waitMs}`);
+  const batchSize = Math.max(pageSize * 4, 24);
+  const offset = (page - 1) * pageSize;
+  const batchPage = Math.floor(offset / batchSize) + 1;
+  const batchOffset = offset % batchSize;
+  const batchCacheKey = buildSearchBatchCacheKey(query, batchPage, batchSize);
+
+  let batch = searchBatchCache.get(batchCacheKey);
+  if (!batch) {
+    const waitMs = getOpenFoodFactsSearchWaitMs();
+    if (waitMs > 0) {
+      throw new Error(`RATE_LIMIT:${waitMs}`);
+    }
+
+    searchRequestTimestamps.push(Date.now());
+    const url = `${OFF_BASE_URL}/cgi/search.pl?search_terms=${encodeURIComponent(query.trim())}&search_simple=1&action=process&json=1&page=${batchPage}&page_size=${batchSize}&fields=${encodeURIComponent(SEARCH_FIELDS)}`;
+
+    const response = await fetch(url, { method: "GET" });
+    if (!response.ok) {
+      throw new Error(`Open Food Facts search failed: ${response.status}`);
+    }
+
+    const json = (await response.json()) as SearchResponse;
+    batch = {
+      products: sortProductsForQuery(
+        (json.products ?? [])
+          .map((product) => normalizeProduct(product as unknown as Record<string, unknown>))
+          .filter((product): product is OpenFoodFactsSearchProduct => !!product),
+        normalizedQuery
+      ),
+      totalCount: Number.isFinite(Number(json.count)) ? Number(json.count) : 0,
+    };
+    searchBatchCache.set(batchCacheKey, batch);
   }
 
-  searchRequestTimestamps.push(Date.now());
-  const url = `https://world.openfoodfacts.net/cgi/search.pl?search_terms=${encodeURIComponent(query.trim())}&search_simple=1&action=process&json=1&page_size=${pageSize}&fields=${encodeURIComponent(SEARCH_FIELDS)}`;
+  const totalCount = batch.totalCount || batch.products.length;
+  const pageCount = totalCount > 0 ? Math.ceil(totalCount / pageSize) : 0;
+  const result: OpenFoodFactsSearchPage = {
+    products: batch.products.slice(batchOffset, batchOffset + pageSize),
+    page,
+    pageSize,
+    pageCount,
+    totalCount,
+    hasMore: page < pageCount,
+  };
 
-  const response = await fetch(url, { method: "GET" });
-  if (!response.ok) {
-    throw new Error(`Open Food Facts search failed: ${response.status}`);
-  }
+  searchCache.set(cacheKey, result);
+  return result;
+};
 
-  const json = await response.json() as SearchResponse;
-  const products = (json.products ?? [])
-    .map((product) => normalizeProduct(product as unknown as Record<string, unknown>))
-    .filter((product): product is OpenFoodFactsSearchProduct => !!product);
-
-  searchCache.set(normalizedQuery, products);
-  return products;
+export const searchOpenFoodFacts = async (query: string, pageSize = 8) => {
+  const result = await searchOpenFoodFactsPage(query, 1, pageSize);
+  return result.products;
 };
 
 export const getData = async (barcode: string) => {
@@ -217,16 +374,16 @@ export const getData = async (barcode: string) => {
     return cached;
   }
 
-  const url = `https://world.openfoodfacts.net/api/v2/product/${trimmedBarcode}?fields=${PRODUCT_FIELDS}`;
+  const url = `${OFF_BASE_URL}/api/v2/product/${trimmedBarcode}?fields=${PRODUCT_FIELDS}`;
   const response = await fetch(url, { method: "GET" });
   if (!response.ok) {
     throw new Error(`Open Food Facts product lookup failed: ${response.status}`);
   }
 
   const json = await response.json() as ProductResult;
-  const normalizedProduct = normalizeProduct(json.product as unknown as Record<string, unknown>);
-  if (!normalizedProduct) {
-    return json;
+  const normalizedProduct = normalizeProduct(json.product as unknown as Record<string, unknown>, trimmedBarcode);
+  if ((json.status ?? 1) !== 1 || !normalizedProduct) {
+    return undefined;
   }
 
   const result: ProductResult = {

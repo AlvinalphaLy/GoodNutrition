@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import {
   ActivityIndicator,
@@ -21,12 +21,25 @@ type ProductDetails = ProductResult["product"];
 
 const normalizeParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
 
+const resolveFinalReturnTarget = (value?: string | null) =>
+  (value && value.length > 0 ? value : "/meals") as Href;
+
+const isAddItemsRoute = (value?: string | null) =>
+  value === "/meals/log-meal/add-items" || value === "/(tabs)/meals/log-meal/add-items";
+
+const buildAddItemsReturnTarget = (nextRoute: string, finalTarget: string) => {
+  const separator = nextRoute.includes("?") ? "&" : "?";
+  return `${nextRoute}${separator}returnTo=${encodeURIComponent(finalTarget)}&fromBarcode=1`;
+};
+
 export default function Product() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     code?: string | string[];
     returnTo?: string | string[];
     finalReturnTo?: string | string[];
+    postAddReturnTo?: string | string[];
+    mode?: string | string[];
   }>();
   const { profile } = useProfile();
   const { addMealItem, mealDraft, setMealLogMode, setMealMethod, setMealType } = useMeals();
@@ -34,12 +47,16 @@ export default function Product() {
   const code = normalizeParam(params.code);
   const returnTo = normalizeParam(params.returnTo);
   const finalReturnTo = normalizeParam(params.finalReturnTo);
+  const postAddReturnTo = normalizeParam(params.postAddReturnTo);
+  const mode = normalizeParam(params.mode);
   const [product, setProduct] = useState<ProductResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("serving");
   const [grams, setGrams] = useState("100");
   const [servings, setServings] = useState("1");
   const [logMessage, setLogMessage] = useState<string | null>(null);
+  const addNavigationLockRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -51,10 +68,22 @@ export default function Product() {
       }
 
       setLoading(true);
-      const data = await getData(code);
-      if (active) {
-        setProduct(data ?? null);
-        setLoading(false);
+      setLookupError(null);
+      try {
+        const data = await getData(code);
+        if (active) {
+          setProduct(data ?? null);
+        }
+      } catch (error) {
+        if (active) {
+          const message = error instanceof Error ? error.message : "We couldn't look up that barcode.";
+          setLookupError(message);
+          setProduct(null);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
@@ -67,6 +96,20 @@ export default function Product() {
 
   const details = product?.product;
   const amount = activeTab === "100g" ? grams : servings;
+  const nextRoute = returnTo || "/meals/log-meal/add-items";
+  const finalTarget = resolveFinalReturnTarget(finalReturnTo);
+  const postAddTarget = resolveFinalReturnTarget(postAddReturnTo || finalReturnTo);
+  const isQuickCheckMode = mode === "quick-check";
+  const scanAgainParams = {
+    pathname: "/barcode-scan" as const,
+    params: {
+      returnTo: nextRoute,
+      finalReturnTo: finalTarget,
+      postAddReturnTo: postAddTarget,
+      mode,
+    },
+  };
+  const manualSearchTarget = buildAddItemsReturnTarget(nextRoute, finalTarget);
   const nutrition = useMemo(
     () => (details ? buildOpenFoodFactsNutrition(details, amount, activeTab === "100g" ? "g" : "serving") : null),
     [activeTab, amount, details]
@@ -95,7 +138,25 @@ export default function Product() {
   if (!details || !code) {
     return (
       <View style={styles.loader}>
-        <Text style={styles.emptyText}>We couldn&apos;t load this Open Food Facts item.</Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Invalid or not found</Text>
+          <Text style={styles.emptyText}>
+            {lookupError || "That barcode did not return a supported food product. Try again or search manually."}
+          </Text>
+          <View style={styles.emptyActionRow}>
+            <Pressable style={[styles.emptyActionButton, styles.secondaryButton]} onPress={() => router.replace(scanAgainParams)}>
+              <Text style={styles.secondaryButtonText}>Scan Again</Text>
+            </Pressable>
+            {!isQuickCheckMode ? (
+              <Pressable style={[styles.emptyActionButton, styles.emptyPrimaryButton]} onPress={() => router.replace(manualSearchTarget as Href)}>
+                <Text style={styles.emptyPrimaryButtonText}>Search Manually</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <Pressable style={styles.linkButton} onPress={() => router.replace(finalTarget)}>
+            <Text style={styles.linkButtonText}>Go Back</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -129,7 +190,7 @@ export default function Product() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionLabel}>Log this item</Text>
+        <Text style={styles.sectionLabel}>{isQuickCheckMode ? "Quick product check" : "Log this item"}</Text>
         <View style={styles.tabRow}>
           <Pressable
             style={[styles.tab, activeTab === "serving" && styles.tabActive]}
@@ -165,48 +226,65 @@ export default function Product() {
 
         {logMessage ? <Text style={styles.errorText}>{logMessage}</Text> : null}
 
-        <Pressable
-          style={[styles.logButton, (!selectedAmountValid || !nutrition) && styles.logButtonDisabled]}
-          disabled={!selectedAmountValid || !nutrition}
-          onPress={() => {
-            if (!nutrition) {
-              setLogMessage("This item does not have enough nutrition data to log in the selected mode.");
-              return;
-            }
+        {!isQuickCheckMode ? (
+          <Pressable
+            style={[styles.logButton, (!selectedAmountValid || !nutrition) && styles.logButtonDisabled]}
+            disabled={!selectedAmountValid || !nutrition}
+            onPress={() => {
+              if (!nutrition) {
+                setLogMessage("This item does not have enough nutrition data to log in the selected mode.");
+                return;
+              }
+              if (addNavigationLockRef.current) {
+                return;
+              }
 
-            setLogMessage(null);
-            setMealMethod("Barcode");
-            if (!mealDraft.mealType) {
-              setMealType("Snack");
-            }
-            setMealLogMode("single");
-            addMealItem({
-              name: details.product_name || "Scanned item",
-              brand: details.brands ?? undefined,
-              quantity: amount,
-              unit: activeTab === "100g" ? "g" : "serving",
-              entryKind: "single",
-              sourceType: "off",
-              offProductCode: code,
-              nutrition,
-            });
+              addNavigationLockRef.current = true;
+              setLogMessage(null);
+              setMealMethod("Barcode");
+              if (!mealDraft.mealType) {
+                setMealType("Snack");
+              }
+              const shouldPreserveDraftMode =
+                mealDraft.logMode === "meal" || mealDraft.mealName.trim().length > 0 || mealDraft.items.length > 0;
+              if (!shouldPreserveDraftMode) {
+                setMealLogMode("single");
+              }
+              addMealItem({
+                name: details.product_name || "Scanned item",
+                brand: details.brands ?? undefined,
+                quantity: amount,
+                unit: activeTab === "100g" ? "g" : "serving",
+                entryKind: "single",
+                sourceType: "off",
+                offProductCode: code,
+                nutrition,
+              });
 
-            const nextRoute = returnTo || "/meals/log-meal/review";
-            const finalTarget = finalReturnTo || "/meals";
-            const separator = nextRoute.includes("?") ? "&" : "?";
-            const target = `${nextRoute}${separator}returnTo=${encodeURIComponent(finalTarget)}`;
-            router.replace(target as Href);
-          }}
-        >
-          <Text style={styles.logButtonText}>
-            {activeTab === "100g" ? "Add to Meals by gram" : "Add to Meals by serving"}
-          </Text>
-        </Pressable>
+              if (isAddItemsRoute(nextRoute)) {
+                router.replace(buildAddItemsReturnTarget(nextRoute, postAddTarget) as Href);
+                return;
+              }
+
+              const separator = nextRoute.includes("?") ? "&" : "?";
+              const target = `${nextRoute}${separator}returnTo=${encodeURIComponent(finalTarget)}`;
+              router.navigate(target as Href);
+            }}
+          >
+            <Text style={styles.logButtonText}>
+              {activeTab === "100g" ? "Add to Meals by gram" : "Add to Meals by serving"}
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.logButton} onPress={() => router.replace(finalTarget)}>
+            <Text style={styles.logButtonText}>Back to Home</Text>
+          </Pressable>
+        )}
       </View>
 
       {nutrition ? (
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Estimated impact on today&apos;s score</Text>
+          <Text style={styles.sectionLabel}>Estimated impact on today's score</Text>
           <Text style={styles.scoreValue}>{scoreSummary?.score ?? 0} / 100</Text>
           <Text style={styles.sectionText}>Approximate rating: {scoreSummary?.rating ?? 0}/5</Text>
           {(scoreSummary?.notes ?? []).slice(0, 3).map((note) => (
@@ -291,9 +369,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 24,
   },
+  emptyCard: {
+    width: "100%",
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    gap: 12,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    color: colors.textDark,
+    fontSize: 20,
+    fontWeight: "700",
+  },
   emptyText: {
     color: colors.textMedium,
     fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  emptyActionRow: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
   },
   card: {
     backgroundColor: colors.white,
@@ -437,6 +537,48 @@ const styles = StyleSheet.create({
   logButtonText: {
     color: colors.white,
     fontSize: 15,
+    fontWeight: "700",
+  },
+  emptyActionButton: {
+    flex: 1,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    justifyContent: "center",
+  },
+  emptyPrimaryButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  emptyPrimaryButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  secondaryButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    color: colors.textDark,
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  linkButton: {
+    paddingVertical: 8,
+  },
+  linkButtonText: {
+    color: colors.primary,
+    fontSize: 14,
     fontWeight: "700",
   },
   scoreValue: {

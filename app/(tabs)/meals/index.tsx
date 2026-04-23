@@ -5,6 +5,17 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { formatQuantityLabel } from "./display";
 import { useMeals } from "./meals-context";
 
+const isSameLocalDay = (dateLike: string, today: Date) => {
+  const value = new Date(dateLike);
+  if (Number.isNaN(value.getTime())) return false;
+
+  return (
+    value.getFullYear() === today.getFullYear() &&
+    value.getMonth() === today.getMonth() &&
+    value.getDate() === today.getDate()
+  );
+};
+
 export default function MealsHubScreen() {
   const router = useRouter();
   const {
@@ -14,25 +25,26 @@ export default function MealsHubScreen() {
     deleteLoggedMeal,
   } = useMeals();
 
-  const todayKey = new Date().toDateString();
+  const today = new Date();
   const todaysMeals = useMemo(
-    () =>
-      loggedMeals.filter(
-        (meal) => new Date(meal.loggedAt).toDateString() === todayKey
-      ),
-    [loggedMeals, todayKey]
+    () => loggedMeals.filter((meal) => isSameLocalDay(meal.loggedAt, today)),
+    [loggedMeals, today]
   );
+  const visibleMeals = todaysMeals.length > 0 ? todaysMeals : loggedMeals;
+  const isShowingFallbackMeals = todaysMeals.length === 0 && loggedMeals.length > 0;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Today&apos;s Logged Meals</Text>
+          <Text style={styles.sectionTitle}>Today's Logged Meals</Text>
           <Text style={styles.sectionSubtitle}>
-            Tap a meal to review it, or use Edit / Delete from the list.
+            {isShowingFallbackMeals
+              ? "Tap a meal to review it, or use Edit / Delete from the list. Showing your most recent logged meals below."
+              : "Tap a meal to review it, or use Edit / Delete from the list."}
           </Text>
 
-          {todaysMeals.length === 0 ? (
+          {visibleMeals.length === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>No meals logged today</Text>
               <Text style={styles.emptyText}>
@@ -40,12 +52,12 @@ export default function MealsHubScreen() {
               </Text>
             </View>
           ) : (
-            todaysMeals.map((meal) => (
+            visibleMeals.map((meal) => (
               <View key={meal.id} style={styles.logCard}>
                 <Pressable
                   onPress={() =>
                     router.push(
-                      `/meals/log-meal/review?loggedMealId=${meal.id}` as Href
+                      `/meals/log-meal/review?loggedMealId=${meal.id}&returnTo=${encodeURIComponent("/meals")}` as Href
                     )
                   }
                 >

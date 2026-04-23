@@ -27,7 +27,7 @@ import {
   isValidPositiveAmount,
 } from "../validation";
 import {
-  searchOpenFoodFacts,
+  searchOpenFoodFactsPage,
   type OpenFoodFactsSearchProduct,
 } from "../../../../src/lib/openFoodFacts";
 
@@ -76,8 +76,12 @@ export default function IngredientSearchScreen() {
   const [attemptedIngredientEditSave, setAttemptedIngredientEditSave] = useState(false);
   const [offResults, setOffResults] = useState<OpenFoodFactsSearchProduct[]>([]);
   const [offSearchLoading, setOffSearchLoading] = useState(false);
+  const [offSearchLoadingMore, setOffSearchLoadingMore] = useState(false);
   const [offSearchStatus, setOffSearchStatus] = useState<string | null>(null);
   const [hasSearchedOff, setHasSearchedOff] = useState(false);
+  const [offResultsPage, setOffResultsPage] = useState(1);
+  const [offResultsHasMore, setOffResultsHasMore] = useState(false);
+  const [offResultsQuery, setOffResultsQuery] = useState("");
 
   const filteredPresetIngredients = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -198,7 +202,11 @@ export default function IngredientSearchScreen() {
     setOffResults([]);
     setOffSearchStatus(null);
     setOffSearchLoading(false);
+    setOffSearchLoadingMore(false);
     setHasSearchedOff(false);
+    setOffResultsPage(1);
+    setOffResultsHasMore(false);
+    setOffResultsQuery("");
   };
 
   const startCustomEditor = (item: PresetFoodItem) => {
@@ -296,6 +304,9 @@ export default function IngredientSearchScreen() {
     if (trimmedQuery.length < 3) {
       setOffResults([]);
       setHasSearchedOff(false);
+      setOffResultsPage(1);
+      setOffResultsHasMore(false);
+      setOffResultsQuery("");
       setOffSearchStatus("Enter at least 3 characters before searching Open Food Facts.");
       return;
     }
@@ -305,10 +316,13 @@ export default function IngredientSearchScreen() {
     setHasSearchedOff(true);
 
     try {
-      const results = await searchOpenFoodFacts(trimmedQuery, 8);
-      setOffResults(results);
+      const resultPage = await searchOpenFoodFactsPage(trimmedQuery, 1, 8);
+      setOffResults(resultPage.products);
+      setOffResultsPage(resultPage.page);
+      setOffResultsHasMore(resultPage.hasMore);
+      setOffResultsQuery(trimmedQuery);
 
-      if (results.length === 0) {
+      if (resultPage.products.length === 0) {
         setOffSearchStatus(
           filteredCustomIngredients.length > 0
             ? "No Open Food Facts matches found. Matching custom ingredients are shown below."
@@ -325,8 +339,40 @@ export default function IngredientSearchScreen() {
         setOffSearchStatus("We couldn't reach Open Food Facts right now. Please try again.");
       }
       setOffResults([]);
+      setOffResultsPage(1);
+      setOffResultsHasMore(false);
+      setOffResultsQuery("");
     } finally {
       setOffSearchLoading(false);
+    }
+  };
+
+  const handleLoadMoreOffResults = async () => {
+    if (!offResultsHasMore || offSearchLoadingMore || !offResultsQuery) return;
+
+    setOffSearchLoadingMore(true);
+    setOffSearchStatus(null);
+    try {
+      const nextPage = offResultsPage + 1;
+      const resultPage = await searchOpenFoodFactsPage(offResultsQuery, nextPage, 8);
+      setOffResults((prev) => {
+        const seenCodes = new Set(prev.map((item) => item.code));
+        const appended = resultPage.products.filter((item) => !seenCodes.has(item.code));
+        return [...prev, ...appended];
+      });
+      setOffResultsPage(resultPage.page);
+      setOffResultsHasMore(resultPage.hasMore);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("RATE_LIMIT:")) {
+        const waitMs = Number(message.split(":")[1] ?? 0);
+        const waitSeconds = Math.max(1, Math.ceil(waitMs / 1000));
+        setOffSearchStatus(`Search limit reached. Wait about ${waitSeconds}s and try again.`);
+      } else {
+        setOffSearchStatus("We couldn't load more Open Food Facts results right now. Please try again.");
+      }
+    } finally {
+      setOffSearchLoadingMore(false);
     }
   };
 
@@ -353,7 +399,7 @@ export default function IngredientSearchScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Ingredient</Text>
           <Text style={styles.sectionText}>
-            Search for an ingredient. If it isn&apos;t found, create a custom ingredient.
+            Search for an ingredient. If it isn't found, create a custom ingredient.
           </Text>
 
           <TextInput
@@ -503,6 +549,19 @@ export default function IngredientSearchScreen() {
                       </Pressable>
                     </View>
                   ))}
+                  {offResultsHasMore ? (
+                    <Pressable
+                      style={[styles.searchButton, offSearchLoadingMore && styles.buttonDisabled]}
+                      onPress={handleLoadMoreOffResults}
+                      disabled={offSearchLoadingMore}
+                    >
+                      {offSearchLoadingMore ? (
+                        <ActivityIndicator color="#ffffff" />
+                      ) : (
+                        <Text style={styles.searchButtonText}>Show More</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
                 </>
               ) : null}
 
@@ -527,7 +586,7 @@ export default function IngredientSearchScreen() {
               {!offSearchLoading && hasSearchedOff && offResults.length === 0 && filteredPresetIngredients.length === 0 && filteredCustomIngredients.length === 0 ? (
                 <View style={styles.emptyMatchCard}>
                   <Text style={styles.emptyMatchTitle}>No ingredients found</Text>
-                  <Text style={styles.emptyMatchText}>Create a custom ingredient below if Open Food Facts doesn&apos;t have what you need.</Text>
+                  <Text style={styles.emptyMatchText}>Create a custom ingredient below if Open Food Facts doesn't have what you need.</Text>
                 </View>
               ) : null}
 

@@ -11,6 +11,9 @@ import { colors } from "../lib/colors";
 import { useMeals } from "./meals/meals-context";
 import { buildMealTags, buildScoreSummary, summarizeNutritionEntries } from "./meals/nutrition";
 
+const HOME_RETURN_TARGET = "/(tabs)" as const;
+const MEALS_RETURN_TARGET = "/meals" as const;
+
 const TAG_COLORS: Record<TagProps["variant"], { bg: string; text: string }> = {
   success: { bg: colors.successLight, text: colors.successText },
   warning: { bg: colors.warningLight, text: colors.warningText },
@@ -50,7 +53,7 @@ type HomeMealCard = {
 export default function Index() {
   const router = useRouter();
   const { profile } = useProfile();
-  const { loggedMeals } = useMeals();
+  const { loggedMeals, beginNewMealDraft } = useMeals();
   const { state, startVoice, stopVoice, reset } = useVoiceLog();
 
   const todayKey = new Date().toDateString();
@@ -117,10 +120,13 @@ export default function Index() {
         harmfulCount={todayNutrition.harmfulIngredientMatches.length}
       />
       <QuickActions
-        onLogMeal={() => router.push(`/meals/log-meal/meal-type?returnTo=${encodeURIComponent("/")}` as Href)}
+        onLogMeal={() => {
+          beginNewMealDraft();
+          router.push(`/meals/log-meal/meal-type?returnTo=${encodeURIComponent(MEALS_RETURN_TARGET)}` as Href);
+        }}
         onBarcode={() =>
           router.push(
-            `/barcode-scan?returnTo=${encodeURIComponent("/meals/log-meal/review")}&finalReturnTo=${encodeURIComponent("/")}` as Href
+            `/barcode-scan?mode=quick-check&finalReturnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href
           )
         }
         onMicPress={() => {
@@ -129,7 +135,7 @@ export default function Index() {
       />
       <Meals
         meals={mealCards}
-        onOpenMeal={(mealId) => router.push(`/meals/log-meal/review?loggedMealId=${mealId}` as Href)}
+        onOpenMeal={(mealId) => router.push(`/(tabs)/meals/log-meal/review?loggedMealId=${mealId}&returnTo=${encodeURIComponent(HOME_RETURN_TARGET)}` as Href)}
       />
       <VoiceRecorder state={state} onStop={() => void stopVoice()} onDismiss={reset} />
     </ScrollView>
@@ -146,7 +152,7 @@ const Summary = ({
   harmfulCount,
 }: SummaryProps) => (
   <View>
-    <Text style={styles.header}>Today&apos;s Summary</Text>
+    <Text style={styles.header}>Today's Summary</Text>
     <View style={styles.subContainer}>
       <View style={styles.summaryTopRow}>
         <Calories current={currentCalories} goal={calorieGoal} />
@@ -242,7 +248,7 @@ const ActionButton = ({
 
 const Meals = ({ meals, onOpenMeal }: { meals: HomeMealCard[]; onOpenMeal: (mealId: string) => void }) => (
   <View>
-    <Text style={styles.header}>Today&apos;s Meals</Text>
+    <Text style={styles.header}>Today's Meals</Text>
     <View>
       {meals.length === 0 ? (
         <Text style={styles.emptyState}>No meals logged yet today.</Text>

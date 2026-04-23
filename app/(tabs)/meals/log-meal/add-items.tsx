@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMemo, useState } from "react";
-import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Stack, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,6 +12,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { useFocusEffect } from "@react-navigation/native";
 
 import { fieldPlaceholderColor, formatQuantityLabel } from "../display";
 import { commonUnits, type PresetFoodItem } from "../meals-data";
@@ -29,7 +31,7 @@ import {
   isValidPositiveAmount,
 } from "../validation";
 import {
-  searchOpenFoodFacts,
+  searchOpenFoodFactsPage,
   type OpenFoodFactsSearchProduct,
 } from "../../../../src/lib/openFoodFacts";
 import { lookupNutrition } from "../../../../src/features/voice-log/services/nutritionLookup";
@@ -76,7 +78,7 @@ type CustomMealItemEditorState = {
 
 export default function AddFoodItemsScreen() {
   const router = useRouter();
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { returnTo, fromBarcode } = useLocalSearchParams<{ returnTo?: string; fromBarcode?: string }>();
   const {
     mealDraft,
     presetFoods,
@@ -113,9 +115,25 @@ export default function AddFoodItemsScreen() {
   const [attemptedCustomMealItemSave, setAttemptedCustomMealItemSave] = useState(false);
   const [foodResults, setFoodResults] = useState<OpenFoodFactsSearchProduct[]>([]);
   const [foodSearchLoading, setFoodSearchLoading] = useState(false);
+  const [foodSearchLoadingMore, setFoodSearchLoadingMore] = useState(false);
+  const reviewNavigationLockRef = useRef(false);
   const [foodSearchStatus, setFoodSearchStatus] = useState<string | null>(null);
   const [hasSearchedFoods, setHasSearchedFoods] = useState(false);
+  const [foodResultsPage, setFoodResultsPage] = useState(1);
+  const [foodResultsHasMore, setFoodResultsHasMore] = useState(false);
+  const [foodResultsQuery, setFoodResultsQuery] = useState("");
   const [lookingUp, setLookingUp] = useState(false);
+
+  const backToMethodTarget = useMemo(() => {
+    if (fromBarcode !== "1") return null;
+    return `${"/meals/log-meal/method"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href;
+  }, [fromBarcode, returnTo]);
+
+  useFocusEffect(
+    useCallback(() => {
+      reviewNavigationLockRef.current = false;
+    }, [])
+  );
 
   const mealMatches = useMemo<MealMatch[]>(() => {
     const normalized = mealSearch.trim().toLowerCase();
@@ -499,8 +517,12 @@ export default function AddFoodItemsScreen() {
     setAttemptedCustomSave(false);
     setFoodResults([]);
     setFoodSearchLoading(false);
+    setFoodSearchLoadingMore(false);
     setFoodSearchStatus(null);
     setHasSearchedFoods(false);
+    setFoodResultsPage(1);
+    setFoodResultsHasMore(false);
+    setFoodResultsQuery("");
   };
 
   const startCustomEditor = (item: PresetFoodItem) => {
@@ -554,6 +576,9 @@ export default function AddFoodItemsScreen() {
     if (trimmedQuery.length < 3) {
       setFoodResults([]);
       setHasSearchedFoods(false);
+      setFoodResultsPage(1);
+      setFoodResultsHasMore(false);
+      setFoodResultsQuery("");
       setFoodSearchStatus("Enter at least 3 characters before searching Open Food Facts.");
       return;
     }
@@ -563,10 +588,13 @@ export default function AddFoodItemsScreen() {
     setHasSearchedFoods(true);
 
     try {
-      const results = await searchOpenFoodFacts(trimmedQuery, 8);
-      setFoodResults(results);
+      const resultPage = await searchOpenFoodFactsPage(trimmedQuery, 1, 8);
+      setFoodResults(resultPage.products);
+      setFoodResultsPage(resultPage.page);
+      setFoodResultsHasMore(resultPage.hasMore);
+      setFoodResultsQuery(trimmedQuery);
 
-      if (results.length === 0) {
+      if (resultPage.products.length === 0) {
         setFoodSearchStatus(
           filteredCustomFoods.length > 0
             ? "No Open Food Facts matches found. Matching custom items are shown below."
@@ -583,13 +611,61 @@ export default function AddFoodItemsScreen() {
         setFoodSearchStatus("We couldn't reach Open Food Facts right now. Please try again.");
       }
       setFoodResults([]);
+      setFoodResultsPage(1);
+      setFoodResultsHasMore(false);
+      setFoodResultsQuery("");
     } finally {
       setFoodSearchLoading(false);
     }
   };
 
+  const handleLoadMoreFoods = async () => {
+    if (!foodResultsHasMore || foodSearchLoadingMore || !foodResultsQuery) return;
+
+    setFoodSearchLoadingMore(true);
+    setFoodSearchStatus(null);
+    try {
+      const nextPage = foodResultsPage + 1;
+      const resultPage = await searchOpenFoodFactsPage(foodResultsQuery, nextPage, 8);
+      setFoodResults((prev) => {
+        const seenCodes = new Set(prev.map((item) => item.code));
+        const appended = resultPage.products.filter((item) => !seenCodes.has(item.code));
+        return [...prev, ...appended];
+      });
+      setFoodResultsPage(resultPage.page);
+      setFoodResultsHasMore(resultPage.hasMore);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("RATE_LIMIT:")) {
+        const waitMs = Number(message.split(":")[1] ?? 0);
+        const waitSeconds = Math.max(1, Math.ceil(waitMs / 1000));
+        setFoodSearchStatus(`Search limit reached. Wait about ${waitSeconds}s and try again.`);
+      } else {
+        setFoodSearchStatus("We couldn't load more Open Food Facts results right now. Please try again.");
+      }
+    } finally {
+      setFoodSearchLoadingMore(false);
+    }
+  };
+
   return (
-    <KeyboardAvoidingView
+    <>
+      <Stack.Screen
+        options={{
+          headerLeft: backToMethodTarget
+            ? () => (
+                <Pressable
+                  onPress={() => router.replace(backToMethodTarget)}
+                  accessibilityRole="button"
+                  style={{ marginLeft: 4, paddingHorizontal: 8, paddingVertical: 6 }}
+                >
+                  <Ionicons name="chevron-back" size={26} color="#111827" />
+                </Pressable>
+              )
+            : undefined,
+        }}
+      />
+      <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={96}
@@ -640,7 +716,7 @@ export default function AddFoodItemsScreen() {
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Meal</Text>
             <Text style={styles.sectionText}>
-              Search for a saved meal. If it isn&apos;t found, create a new meal and add its items.
+              Search for a saved meal. If it isn't found, create a new meal and add its items.
             </Text>
 
             <TextInput
@@ -759,7 +835,6 @@ export default function AddFoodItemsScreen() {
               placeholder="Search foods like salt, bread, or yogurt"
               placeholderTextColor={fieldPlaceholderColor}
               value={foodSearch}
-              onSubmitEditing={handleFoodSearch}
               onChangeText={(value) => {
                 setFoodSearch(value);
                 setFoodResults([]);
@@ -902,6 +977,19 @@ export default function AddFoodItemsScreen() {
                         </Pressable>
                       </View>
                     ))}
+                    {foodResultsHasMore ? (
+                      <Pressable
+                        style={[styles.searchButton, foodSearchLoadingMore && styles.buttonDisabled]}
+                        onPress={handleLoadMoreFoods}
+                        disabled={foodSearchLoadingMore}
+                      >
+                        {foodSearchLoadingMore ? (
+                          <ActivityIndicator color="#ffffff" />
+                        ) : (
+                          <Text style={styles.searchButtonText}>Show More</Text>
+                        )}
+                      </Pressable>
+                    ) : null}
                   </>
                 ) : null}
 
@@ -925,7 +1013,7 @@ export default function AddFoodItemsScreen() {
                 {!foodSearchLoading && hasSearchedFoods && foodResults.length === 0 && filteredPresetFoods.length === 0 && filteredCustomFoods.length === 0 ? (
                   <View style={styles.emptyMatchCard}>
                     <Text style={styles.emptyMatchTitle}>No results found</Text>
-                    <Text style={styles.emptyMatchText}>Create a custom item below if Open Food Facts doesn&apos;t have what you need.</Text>
+                    <Text style={styles.emptyMatchText}>Create a custom item below if Open Food Facts doesn't have what you need.</Text>
                   </View>
                 ) : null}
 
@@ -997,7 +1085,7 @@ export default function AddFoodItemsScreen() {
                 <Text style={styles.helperText}>Open Food Facts items support serving when that data exists, or grams for per-100g nutrition.</Text>
               ) : null}
               {selectedFood?.source === "off" && quantity.trim() && !selectedFoodNutrition ? (
-                <Text style={styles.errorText}>This Open Food Facts result doesn&apos;t have enough nutrition for the selected unit. Try grams.</Text>
+                <Text style={styles.errorText}>This Open Food Facts result doesn't have enough nutrition for the selected unit. Try grams.</Text>
               ) : null}
             </View>
 
@@ -1214,7 +1302,7 @@ export default function AddFoodItemsScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Added Items</Text>
           <Text style={styles.sectionText}>
-            Review and edit what you&apos;ve added so far. Remove anything you don&apos;t want before finishing.
+            Review and edit what you've added so far. Remove anything you don't want before finishing.
           </Text>
 
           {mealDraft.items.length === 0 ? (
@@ -1321,16 +1409,18 @@ export default function AddFoodItemsScreen() {
         <Pressable
           style={[styles.doneButton, !canFinish && styles.buttonDisabled]}
           disabled={!canFinish}
-          onPress={() =>
-            router.push(
-              `${"/meals/log-meal/review"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}` as Href
-            )
-          }
+          onPress={() => {
+            if (!canFinish || reviewNavigationLockRef.current) return;
+            reviewNavigationLockRef.current = true;
+            const target = `${"/meals/log-meal/review"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+            router.navigate(target as Href);
+          }}
         >
           <Text style={[styles.primaryButtonText, !canFinish && styles.buttonTextDisabled]}>Done</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -1352,6 +1442,11 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     lineHeight: 22,
     marginBottom: 20,
+  },
+  topActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
   },
   summaryCard: {
     backgroundColor: "#111827",

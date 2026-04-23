@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -31,11 +31,14 @@ export default function BarcodeScan() {
 
 const Camera = () => {
   const [scanned, setScanned] = useState(false);
+  const scanLockRef = useRef(false);
   const [torch, setTorch] = useState(false);
   const [flashType, setFlashType] = useState<"flash" | "flash-off">("flash-off");
   const params = useLocalSearchParams<{
     returnTo?: string | string[];
     finalReturnTo?: string | string[];
+    postAddReturnTo?: string | string[];
+    mode?: string | string[];
   }>();
   const router = useRouter();
 
@@ -47,10 +50,19 @@ const Camera = () => {
     () => (Array.isArray(params.finalReturnTo) ? params.finalReturnTo[0] : params.finalReturnTo),
     [params.finalReturnTo]
   );
+  const mode = useMemo(
+    () => (Array.isArray(params.mode) ? params.mode[0] : params.mode),
+    [params.mode]
+  );
+  const postAddReturnTo = useMemo(
+    () => (Array.isArray(params.postAddReturnTo) ? params.postAddReturnTo[0] : params.postAddReturnTo),
+    [params.postAddReturnTo]
+  );
 
   useFocusEffect(
     useCallback(() => {
       setScanned(false);
+      scanLockRef.current = false;
     }, [])
   );
 
@@ -63,9 +75,10 @@ const Camera = () => {
         barcodeScannerSettings={{
           barcodeTypes: ["upc_a", "upc_e", "ean13"],
         }}
-        onBarcodeScanned={({ data }) => {
-          if (scanned) return;
+        onBarcodeScanned={scanned ? undefined : ({ data }) => {
+          if (scanLockRef.current || scanned) return;
 
+          scanLockRef.current = true;
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setScanned(true);
           setTorch(false);
@@ -76,6 +89,8 @@ const Camera = () => {
               code: data,
               returnTo,
               finalReturnTo,
+              postAddReturnTo,
+              mode,
             },
           });
         }}

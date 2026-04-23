@@ -46,8 +46,10 @@ export default function MealMethodScreen() {
           onPress={() => {
             setMealMethod(method.title);
             if (method.title === "Barcode") {
+              const methodReturnTarget = `${"/meals/log-meal/method"}${typeof returnTo === "string" ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+              const postAddReturnTarget = typeof returnTo === "string" && returnTo ? returnTo : "/meals";
               router.push(
-                `/barcode-scan?returnTo=${encodeURIComponent("/meals/log-meal/add-items")}${typeof returnTo === "string" ? `&finalReturnTo=${encodeURIComponent(returnTo)}` : ""}` as Href
+                `/barcode-scan?returnTo=${encodeURIComponent("/meals/log-meal/add-items")}&finalReturnTo=${encodeURIComponent(methodReturnTarget)}&postAddReturnTo=${encodeURIComponent(postAddReturnTarget)}` as Href
               );
               return;
             }

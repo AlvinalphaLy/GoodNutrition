@@ -25,7 +25,7 @@ export default function MealTypeScreen() {
       </Pressable>
       <Text style={styles.title}>Select Meal Type</Text>
       <Text style={styles.subtitle}>
-        Pick the type of meal you&apos;re logging
+        Pick the type of meal you're logging
       </Text>
 
       {mealTypes.map((meal) => (
